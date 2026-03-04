@@ -162,26 +162,9 @@ def run_process(
         str(run_plan.raw_path),
         "--out",
         str(run_plan.events_path),
-        "--mc",
-        args.mc_collection,
-        "--simhits",
-        args.sim_collection,
-        "--geom-id",
-        run_plan.geometry_variant.geometry_id,
-        "--run-id",
-        str(run_plan.run_id_int),
-        "--nlayers",
-        str(run_plan.geometry_variant.n_layers),
     ] + extra_process_flags
     if run_plan.expected_pdg is not None:
         command.extend(["--expected-pdg", str(run_plan.expected_pdg)])
-    segment_layers = [
-        int(run_plan.geometry_variant.params.get("seg1_layers", 0) or 0),
-        int(run_plan.geometry_variant.params.get("seg2_layers", 0) or 0),
-        int(run_plan.geometry_variant.params.get("seg3_layers", 0) or 0),
-    ]
-    if sum(segment_layers) > 0:
-        command.extend(["--seg-layers", *(str(layer_count) for layer_count in segment_layers)])
     start = time.time()
     run_cmd(command, dry_run=args.dry_run, label="process")
     return time.time() - start, command

@@ -1,0 +1,1 @@
+Use Latin Hypercube sampling to generate simple (backwards) hadronic calorimeter geometry used to train a surrogate.

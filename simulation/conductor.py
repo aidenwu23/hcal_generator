@@ -8,7 +8,7 @@ metadata writing, performance analysis, and run manifests.
 Example CLI
 -----------
 python3 simulation/conductor.py \
-    --spec geometries/sweeps/sweep_lhs.yaml \
+    --spec geometries/sweeps/sweep000.yaml \
     --process-bin ./build/bin/process \
     --ddsim ddsim \
     --root-bin root \
@@ -58,7 +58,7 @@ def parse_args() -> argparse.Namespace:
         nargs="?",
         const="",
         default=[],
-        help="Optional chunk appended to the processor call (repeatable, quote values like \"--shape --twozone\").",
+        help="Optional chunk appended to the processor call.",
     )
     parser.add_argument("--gun-particle", default="neutron", help="Primary gun particle (default: neutron).")
     parser.add_argument("--gun-energy", type=float, nargs="+", default=[10.0], help="Gun energies in GeV (default: 10).")
@@ -66,8 +66,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gun-direction", default="0 0 -1", help="Gun direction string passed to ddsim.")
     parser.add_argument("--events-per-run", type=int, default=1, help="Number of events per ddsim run.")
     parser.add_argument("--seeds", type=int, nargs="+", help="Random seeds for ddsim. Omit to let ddsim pick its own.")
-    parser.add_argument("--mc-collection", default="GeneratedParticles", help="MC collection name passed to the processor (default: GeneratedParticles).")
-    parser.add_argument("--sim-collection", default="HCal_Readout", help="Sim hits collection passed to the processor.")
     parser.add_argument(
         "--expected-pdg",
         type=int,
@@ -154,8 +152,6 @@ def main() -> None:
 
             run_record.ddsim_seconds = run_ddsim(args, run_plan)
             run_record.process_seconds, _ = run_process(args, run_plan, extra_process_flags)
-            run_record.mc_collection = args.mc_collection
-            run_record.sim_collection = args.sim_collection
             run_record.meta_seconds = write_metadata(args, run_plan)
             run_record.performance_seconds = run_performance_analysis(args, run_plan)
             run_record.status = "completed"
