@@ -14,7 +14,7 @@ python3 conductor.py \
     --root-bin root \
     --events-per-run 100 \
     --gun-particle neutron \
-    --gun-energy 6 7 \
+    --gun-energy 5 \
     --overwrite
 """
 

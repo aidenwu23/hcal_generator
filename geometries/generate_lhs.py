@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Generate a sweep YAML file using Latin Hypercube sampling."""
+"""Generate a sweep YAML file using Latin Hypercube sampling.
+python3 geometries/generate_lhs.py \
+  --template geometries/sweeps/template_sweep.yaml \
+  --out geometries/sweeps/sweep000.yaml \
+  --n 3
+
+"""
 
 from __future__ import annotations
 
