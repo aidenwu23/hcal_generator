@@ -42,7 +42,6 @@ def eval_length_mm(value: object, *, default: float = 0.0) -> float:
                 return default
     return default
 
-
 @dataclass
 class GeometryVariant:
     geometry_id: str
@@ -60,6 +59,36 @@ class GeometryVariant:
     @property
     def side(self) -> str:
         return str(self.params.get("side", "-z"))
+
+
+@dataclass
+class GeometryLayerRow:
+    layer_index: int
+    absorber_thickness_mm: float
+    scintillator_thickness_mm: float
+    spacer_thickness_mm: float
+    layer_total_thickness_mm: float
+    depth_front_mm: float
+    depth_mid_mm: float
+    depth_back_mm: float
+    absorber_depth_mid_mm: float
+    scintillator_depth_mid_mm: float
+
+
+@dataclass
+class GeometryLayerSummary:
+    total_depth_mm: float
+    total_absorber_thickness_mm: float
+    absorber_fraction_by_depth: float
+
+
+@dataclass
+class GeometrySegmentRecipe:
+    segment_index: int
+    layer_count: int
+    absorber_thickness_mm: float
+    scintillator_thickness_mm: float
+    spacer_thickness_mm: float
 
 
 def inspect_geometry_rows(python_bin: str, spec_paths: Iterable[Path]) -> List[Dict[str, object]]:
@@ -129,41 +158,11 @@ def load_geometry_variants(
 
 def derive_thickness_and_zrange(geometry_variant: GeometryVariant) -> Tuple[float, float, float]:
     """Return (thickness_mm, zmin_mm_world, zmax_mm_world) from geometry params."""
-    geometry_parameters = geometry_variant.params
-    spacer_thickness = eval_length_mm(geometry_parameters.get("t_spacer"), default=0.0)
-    absorber_thickness = eval_length_mm(geometry_parameters.get("t_absorber"), default=0.0)
-    scintillator_thickness = eval_length_mm(geometry_parameters.get("t_scin"), default=0.0)
-    layer_count = geometry_variant.n_layers
-    segment_layers = [
-        int(geometry_parameters.get("seg1_layers", 0) or 0),
-        int(geometry_parameters.get("seg2_layers", 0) or 0),
-        int(geometry_parameters.get("seg3_layers", 0) or 0),
-    ]
+    layer_rows = build_layer_stack(geometry_variant)
+    summary = summarize_layer_stack(layer_rows)
+    total_thickness = summary.total_depth_mm
 
-    total_thickness = 0.0
-    if sum(segment_layers) > 0:
-        for segment_index, segment_layer_count in enumerate(segment_layers, start=1):
-            if segment_layer_count <= 0:
-                continue
-            segment_absorber_thickness = eval_length_mm(
-                geometry_parameters.get(f"t_absorber_seg{segment_index}"),
-                default=absorber_thickness,
-            )
-            segment_scintillator_thickness = eval_length_mm(
-                geometry_parameters.get(f"t_scin_seg{segment_index}"),
-                default=scintillator_thickness,
-            )
-            segment_spacer_thickness = eval_length_mm(
-                geometry_parameters.get(f"t_spacer_seg{segment_index}"),
-                default=spacer_thickness,
-            )
-            total_thickness += segment_layer_count * (
-                segment_absorber_thickness + segment_scintillator_thickness + segment_spacer_thickness
-            )
-    else:
-        total_thickness = layer_count * (absorber_thickness + scintillator_thickness + spacer_thickness)
-
-    z_face_mm = eval_length_mm(geometry_parameters.get("zmin"), default=0.0)
+    z_face_mm = eval_length_mm(geometry_variant.params.get("zmin"), default=0.0)
     if geometry_variant.side == "-z":
         zmax_world = -z_face_mm
         zmin_world = -(z_face_mm + total_thickness)
@@ -190,3 +189,111 @@ def _validate_geometry_files(geometry_id: str, params_path: Path, xml_path: Path
     file_geometry_id = str(parameter_payload.get("geometry_id", "")).strip()
     if file_geometry_id != geometry_id:
         raise ValueError(f"Geometry ID mismatch in {params_path}")
+
+
+def build_layer_stack(geometry_variant: GeometryVariant) -> List[GeometryLayerRow]:
+    """Expand the generated 3-segment HCAL into one physical row per layer."""
+    segment_recipes = _resolve_segment_recipes(geometry_variant)
+
+    layer_rows: List[GeometryLayerRow] = []
+    running_depth_mm = 0.0
+    layer_index = 0
+    for segment_recipe in segment_recipes:
+        layer_total_thickness_mm = (
+            segment_recipe.absorber_thickness_mm
+            + segment_recipe.scintillator_thickness_mm
+            + 2.0 * segment_recipe.spacer_thickness_mm
+        )
+        for _ in range(segment_recipe.layer_count):
+            depth_front_mm = running_depth_mm
+            absorber_depth_mid_mm = depth_front_mm + 0.5 * segment_recipe.absorber_thickness_mm
+            scintillator_front_mm = (
+                depth_front_mm
+                + segment_recipe.absorber_thickness_mm
+                + segment_recipe.spacer_thickness_mm
+            )
+            scintillator_depth_mid_mm = (
+                scintillator_front_mm + 0.5 * segment_recipe.scintillator_thickness_mm
+            )
+            depth_back_mm = depth_front_mm + layer_total_thickness_mm
+            depth_mid_mm = 0.5 * (depth_front_mm + depth_back_mm)
+
+            layer_rows.append(
+                GeometryLayerRow(
+                    layer_index=layer_index,
+                    absorber_thickness_mm=segment_recipe.absorber_thickness_mm,
+                    scintillator_thickness_mm=segment_recipe.scintillator_thickness_mm,
+                    spacer_thickness_mm=segment_recipe.spacer_thickness_mm,
+                    layer_total_thickness_mm=layer_total_thickness_mm,
+                    depth_front_mm=depth_front_mm,
+                    depth_mid_mm=depth_mid_mm,
+                    depth_back_mm=depth_back_mm,
+                    absorber_depth_mid_mm=absorber_depth_mid_mm,
+                    scintillator_depth_mid_mm=scintillator_depth_mid_mm,
+                )
+            )
+
+            running_depth_mm = depth_back_mm
+            layer_index += 1
+    return layer_rows
+
+
+def summarize_layer_stack(layer_rows: List[GeometryLayerRow]) -> GeometryLayerSummary:
+    """Reduce the layer rows to the geometry-level depth scalars."""
+    if not layer_rows:
+        raise ValueError("Geometry has no resolved layers.")
+
+    total_depth_mm = layer_rows[-1].depth_back_mm
+    total_absorber_thickness_mm = sum(
+        layer_row.absorber_thickness_mm for layer_row in layer_rows
+    )
+    absorber_fraction_by_depth = (
+        total_absorber_thickness_mm / total_depth_mm if total_depth_mm > 0.0 else 0.0
+    )
+    return GeometryLayerSummary(
+        total_depth_mm=total_depth_mm,
+        total_absorber_thickness_mm=total_absorber_thickness_mm,
+        absorber_fraction_by_depth=absorber_fraction_by_depth,
+    )
+
+
+def _resolve_segment_recipes(geometry_variant: GeometryVariant) -> List[GeometrySegmentRecipe]:
+    """Build the three contiguous longitudinal segment recipes used by the HCAL plugin."""
+    geometry_parameters = geometry_variant.params
+    if geometry_variant.n_layers <= 0:
+        raise ValueError("Generated HCAL geometry must define a positive nLayers.")
+
+    segment_layer_counts = [
+        int(geometry_parameters.get("seg1_layers", 0) or 0),
+        int(geometry_parameters.get("seg2_layers", 0) or 0),
+        int(geometry_parameters.get("seg3_layers", 0) or 0),
+    ]
+    if any(segment_layer_count <= 0 for segment_layer_count in segment_layer_counts):
+        raise ValueError(
+            "Generated HCAL geometry must define positive seg1_layers, seg2_layers, and seg3_layers."
+        )
+    if sum(segment_layer_counts) != geometry_variant.n_layers:
+        raise ValueError("Segment layer counts must sum to nLayers.")
+
+    base_spacer_mm = eval_length_mm(geometry_parameters.get("t_spacer"), default=0.0)
+
+    segment_recipes: List[GeometrySegmentRecipe] = []
+    for segment_index, segment_layer_count in enumerate(segment_layer_counts, start=1):
+        absorber_thickness_mm = eval_length_mm(
+            geometry_parameters.get(f"t_absorber_seg{segment_index}"),
+            default=0.0,
+        )
+        scintillator_thickness_mm = eval_length_mm(
+            geometry_parameters.get(f"t_scin_seg{segment_index}"),
+            default=0.0,
+        )
+        segment_recipes.append(
+            GeometrySegmentRecipe(
+                segment_index=segment_index,
+                layer_count=segment_layer_count,
+                absorber_thickness_mm=absorber_thickness_mm,
+                scintillator_thickness_mm=scintillator_thickness_mm,
+                spacer_thickness_mm=base_spacer_mm,
+            )
+        )
+    return segment_recipes

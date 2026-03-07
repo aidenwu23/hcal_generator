@@ -1,0 +1,88 @@
+name: sweep_lhs
+tag_prefix: lhs
+template: geometries/templates/hcal_template.xml
+detector_type: hcal
+index_base: 0
+outdir_generated: geometries/generated
+constants:
+  side: -z
+  dx: 100/2*cm
+  dy: 100/2*cm
+  zmin: 0.20*m
+  nLayers: 10
+  t_spacer: 0.1*cm
+  spacerMaterial: Air
+  seg1_layers: 3
+  seg2_layers: 3
+  seg3_layers: 4
+variants:
+- tag: lhs000
+  t_absorber_seg1: 3.9363
+  t_scin_seg1: 0.5919
+  t_absorber_seg2: 4.3959
+  t_scin_seg2: 0.5995
+  t_absorber_seg3: 3.8187
+  t_scin_seg3: 0.5426
+- tag: lhs001
+  t_absorber_seg1: 4.1393
+  t_scin_seg1: 0.3381
+  t_absorber_seg2: 3.7456
+  t_scin_seg2: 0.4519
+  t_absorber_seg3: 4.2184
+  t_scin_seg3: 0.3599
+- tag: lhs002
+  t_absorber_seg1: 4.3143
+  t_scin_seg1: 0.479
+  t_absorber_seg2: 3.627
+  t_scin_seg2: 0.5347
+  t_absorber_seg3: 3.9137
+  t_scin_seg3: 0.4338
+- tag: lhs003
+  t_absorber_seg1: 3.67
+  t_scin_seg1: 0.4073
+  t_absorber_seg2: 4.1972
+  t_scin_seg2: 0.5063
+  t_absorber_seg3: 4.3329
+  t_scin_seg3: 0.4906
+- tag: lhs004
+  t_absorber_seg1: 4.0385
+  t_scin_seg1: 0.5285
+  t_absorber_seg2: 4.2003
+  t_scin_seg2: 0.4206
+  t_absorber_seg3: 3.5314
+  t_scin_seg3: 0.3705
+- tag: lhs005
+  t_absorber_seg1: 4.2312
+  t_scin_seg1: 0.3183
+  t_absorber_seg2: 4.4865
+  t_scin_seg2: 0.3084
+  t_absorber_seg3: 4.0475
+  t_scin_seg3: 0.5307
+- tag: lhs006
+  t_absorber_seg1: 3.8514
+  t_scin_seg1: 0.5433
+  t_absorber_seg2: 3.5066
+  t_scin_seg2: 0.3493
+  t_absorber_seg3: 4.1428
+  t_scin_seg3: 0.4103
+- tag: lhs007
+  t_absorber_seg1: 3.7406
+  t_scin_seg1: 0.4999
+  t_absorber_seg2: 4.0608
+  t_scin_seg2: 0.3933
+  t_absorber_seg3: 3.7773
+  t_scin_seg3: 0.4613
+- tag: lhs008
+  t_absorber_seg1: 3.5916
+  t_scin_seg1: 0.425
+  t_absorber_seg2: 3.9213
+  t_scin_seg2: 0.3828
+  t_absorber_seg3: 4.4124
+  t_scin_seg3: 0.3282
+- tag: lhs009
+  t_absorber_seg1: 4.4664
+  t_scin_seg1: 0.3855
+  t_absorber_seg2: 3.855
+  t_scin_seg2: 0.5461
+  t_absorber_seg3: 3.6769
+  t_scin_seg3: 0.5984

@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -19,30 +18,20 @@ namespace {
 
 constexpr const char* kPluginName = "hcal_plugin";
 constexpr int kSegmentCount = 3;
-constexpr double kUnsetThickness = -1.0;
 
 struct GeoParameters {
   double half_width_x = 0.50 * dd4hep::m;
   double half_width_y = 0.30 * dd4hep::m;
   double front_face_z = 0.20 * dd4hep::m;
   double spacer_thickness = 0.0;
-  double scintillator_thickness = 0.40 * dd4hep::cm;
-  double absorber_thickness = 1.52 * dd4hep::cm;
-  int layer_count = 7;
+  int layer_count = 10;
   std::string side = "-z";
-  std::string absorber_material_name = "Steel235";
-  std::string active_material_name = "Polystyrene";
-  std::string spacer_material_name = "Kapton";
+  std::string absorber_material_name;
+  std::string active_material_name;
+  std::string spacer_material_name;
   std::array<int, kSegmentCount> segment_layer_counts {{0, 0, 0}};
-  std::array<double, kSegmentCount> segment_absorber_thicknesses {{
-      kUnsetThickness, kUnsetThickness, kUnsetThickness
-  }};
-  std::array<double, kSegmentCount> segment_scintillator_thicknesses {{
-      kUnsetThickness, kUnsetThickness, kUnsetThickness
-  }};
-  std::array<double, kSegmentCount> segment_spacer_thicknesses {{
-      kUnsetThickness, kUnsetThickness, kUnsetThickness
-  }};
+  std::array<double, kSegmentCount> segment_absorber_thicknesses {{0.0, 0.0, 0.0}};
+  std::array<double, kSegmentCount> segment_scintillator_thicknesses {{0.0, 0.0, 0.0}};
 };
 
 struct ResolvedSegment {
@@ -54,7 +43,6 @@ struct ResolvedSegment {
 
 struct SegmentVolumes {
   int layer_count = 0;
-  bool place_spacer = false;
   double absorber_half_thickness = 0.0;
   double spacer_half_thickness = 0.0;
   double scintillator_half_thickness = 0.0;
@@ -62,16 +50,6 @@ struct SegmentVolumes {
   Volume spacer_volume;
   Volume scintillator_volume;
 };
-
-bool is_sentinel_material(std::string material_name) {
-  std::transform(
-      material_name.begin(),
-      material_name.end(),
-      material_name.begin(),
-      [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
-  return material_name.empty() || material_name == "-1" || material_name == "none" ||
-         material_name == "false";
-}
 
 bool find_parameter_value(xml_h xml_handle, const char* parameter_name, std::string& value) {
   for (xml_coll_t parameter(xml_handle, _U(parameter)); parameter; ++parameter) {
@@ -121,10 +99,6 @@ GeoParameters read_parameters(xml_h xml_handle) {
       get_double_parameter(xml_handle, "zmin", geo_parameters.front_face_z);
   geo_parameters.spacer_thickness =
       get_double_parameter(xml_handle, "t_spacer", geo_parameters.spacer_thickness);
-  geo_parameters.scintillator_thickness =
-      get_double_parameter(xml_handle, "t_scin", geo_parameters.scintillator_thickness);
-  geo_parameters.absorber_thickness =
-      get_double_parameter(xml_handle, "t_absorber", geo_parameters.absorber_thickness);
   geo_parameters.layer_count =
       get_int_parameter(xml_handle, "nLayers", geo_parameters.layer_count);
   geo_parameters.side = get_string_parameter(xml_handle, "side", geo_parameters.side);
@@ -147,9 +121,6 @@ GeoParameters read_parameters(xml_h xml_handle) {
   const std::array<const char*, kSegmentCount> segment_scintillator_keys {{
       "t_scin_seg1", "t_scin_seg2", "t_scin_seg3"
   }};
-  const std::array<const char*, kSegmentCount> segment_spacer_keys {{
-      "t_spacer_seg1", "t_spacer_seg2", "t_spacer_seg3"
-  }};
 
   for (int segment_index = 0; segment_index < kSegmentCount; ++segment_index) {
     geo_parameters.segment_layer_counts[segment_index] =
@@ -167,11 +138,6 @@ GeoParameters read_parameters(xml_h xml_handle) {
             xml_handle,
             segment_scintillator_keys[segment_index],
             geo_parameters.segment_scintillator_thicknesses[segment_index]);
-    geo_parameters.segment_spacer_thicknesses[segment_index] =
-        get_double_parameter(
-            xml_handle,
-            segment_spacer_keys[segment_index],
-            geo_parameters.segment_spacer_thicknesses[segment_index]);
   }
 
   return geo_parameters;
@@ -180,20 +146,10 @@ GeoParameters read_parameters(xml_h xml_handle) {
 std::vector<ResolvedSegment> resolve_segments(
     const GeoParameters& geo_parameters,
     double minimum_build_thickness) {
-  bool any_segment_layers = false;
-  bool any_segment_thickness = false;
   int segment_layer_sum = 0;
 
   for (int segment_index = 0; segment_index < kSegmentCount; ++segment_index) {
-    if (geo_parameters.segment_layer_counts[segment_index] > 0) {
-      any_segment_layers = true;
-      segment_layer_sum += geo_parameters.segment_layer_counts[segment_index];
-    }
-    if (geo_parameters.segment_absorber_thicknesses[segment_index] >= 0.0 ||
-        geo_parameters.segment_scintillator_thicknesses[segment_index] >= 0.0 ||
-        geo_parameters.segment_spacer_thicknesses[segment_index] >= 0.0) {
-      any_segment_thickness = true;
-    }
+    segment_layer_sum += geo_parameters.segment_layer_counts[segment_index];
   }
 
   if (geo_parameters.layer_count <= 0) {
@@ -206,36 +162,12 @@ std::vector<ResolvedSegment> resolve_segments(
     throw std::runtime_error("Invalid detector width");
   }
 
-  if (!any_segment_layers) {
-    if (any_segment_thickness) {
-      dd4hep::printout(
-          dd4hep::FATAL,
-          kPluginName,
-          "Segment thickness overrides require seg1_layers, seg2_layers, and seg3_layers.");
-      throw std::runtime_error("Incomplete segment configuration");
-    }
-    if (geo_parameters.absorber_thickness <= minimum_build_thickness ||
-        geo_parameters.scintillator_thickness <= minimum_build_thickness) {
-      dd4hep::printout(
-          dd4hep::FATAL,
-          kPluginName,
-          "t_absorber and t_scin must be larger than the build limit.");
-      throw std::runtime_error("Invalid layer thickness");
-    }
-    return {ResolvedSegment {
-        geo_parameters.layer_count,
-        geo_parameters.absorber_thickness,
-        geo_parameters.spacer_thickness,
-        geo_parameters.scintillator_thickness
-    }};
-  }
-
   for (int segment_index = 0; segment_index < kSegmentCount; ++segment_index) {
     if (geo_parameters.segment_layer_counts[segment_index] <= 0) {
       dd4hep::printout(
           dd4hep::FATAL,
           kPluginName,
-          "seg%d_layers must be positive when segmentation is enabled.",
+          "seg%d_layers must be positive.",
           segment_index + 1);
       throw std::runtime_error("Invalid segment layer count");
     }
@@ -253,27 +185,10 @@ std::vector<ResolvedSegment> resolve_segments(
   resolved_segments.reserve(kSegmentCount);
   for (int segment_index = 0; segment_index < kSegmentCount; ++segment_index) {
     const double absorber_thickness =
-        geo_parameters.segment_absorber_thicknesses[segment_index] >= 0.0
-            ? geo_parameters.segment_absorber_thicknesses[segment_index]
-            : geo_parameters.absorber_thickness;
-    const double spacer_thickness =
-        geo_parameters.segment_spacer_thicknesses[segment_index] >= 0.0
-            ? geo_parameters.segment_spacer_thicknesses[segment_index]
-            : geo_parameters.spacer_thickness;
+        geo_parameters.segment_absorber_thicknesses[segment_index];
+    const double spacer_thickness = geo_parameters.spacer_thickness;
     const double scintillator_thickness =
-        geo_parameters.segment_scintillator_thicknesses[segment_index] >= 0.0
-            ? geo_parameters.segment_scintillator_thicknesses[segment_index]
-            : geo_parameters.scintillator_thickness;
-
-    if (absorber_thickness <= minimum_build_thickness ||
-        scintillator_thickness <= minimum_build_thickness) {
-      dd4hep::printout(
-          dd4hep::FATAL,
-          kPluginName,
-          "Segment %d thicknesses must be larger than the build limit.",
-          segment_index + 1);
-      throw std::runtime_error("Invalid segment thickness");
-    }
+        geo_parameters.segment_scintillator_thicknesses[segment_index];
 
     resolved_segments.push_back(ResolvedSegment {
         geo_parameters.segment_layer_counts[segment_index],
@@ -286,12 +201,8 @@ std::vector<ResolvedSegment> resolve_segments(
 }
 
 double get_detector_thickness(
-    const std::vector<ResolvedSegment>& resolved_segments,
-    bool has_spacer_material,
-    bool& place_any_spacer,
-    double minimum_build_thickness) {
+    const std::vector<ResolvedSegment>& resolved_segments) {
   double detector_thickness = 0.0;
-  place_any_spacer = false;
 
   for (const ResolvedSegment& resolved_segment : resolved_segments) {
     if (resolved_segment.layer_count <= 0) {
@@ -299,16 +210,10 @@ double get_detector_thickness(
       throw std::runtime_error("Invalid segment layer count");
     }
 
-    const bool place_segment_spacer =
-        has_spacer_material && resolved_segment.spacer_thickness > minimum_build_thickness;
-    if (place_segment_spacer) {
-      place_any_spacer = true;
-    }
-
     const double layer_thickness =
         resolved_segment.absorber_thickness +
         resolved_segment.scintillator_thickness +
-        (place_segment_spacer ? 2.0 * resolved_segment.spacer_thickness : 0.0);
+        2.0 * resolved_segment.spacer_thickness;
     detector_thickness += resolved_segment.layer_count * layer_thickness;
   }
 
@@ -341,11 +246,9 @@ std::vector<SegmentVolumes> build_segment_volumes(
     Material absorber_material,
     Material scintillator_material,
     Material spacer_material,
-    bool has_spacer_material,
     const VisAttr& absorber_vis,
     const VisAttr& scintillator_vis,
-    const VisAttr& spacer_vis,
-    double minimum_build_thickness) {
+    const VisAttr& spacer_vis) {
   std::vector<SegmentVolumes> segment_volumes;
   segment_volumes.reserve(resolved_segments.size());
 
@@ -355,11 +258,7 @@ std::vector<SegmentVolumes> build_segment_volumes(
     segment_volume.layer_count = resolved_segment.layer_count;
     segment_volume.absorber_half_thickness = 0.5 * resolved_segment.absorber_thickness;
     segment_volume.scintillator_half_thickness = 0.5 * resolved_segment.scintillator_thickness;
-    segment_volume.place_spacer =
-        has_spacer_material && resolved_segment.spacer_thickness > minimum_build_thickness;
-    if (segment_volume.place_spacer) {
-      segment_volume.spacer_half_thickness = 0.5 * resolved_segment.spacer_thickness;
-    }
+    segment_volume.spacer_half_thickness = 0.5 * resolved_segment.spacer_thickness;
 
     const std::string segment_suffix = "_seg" + std::to_string(segment_index + 1);
     segment_volume.absorber_volume = Volume(
@@ -385,17 +284,15 @@ std::vector<SegmentVolumes> build_segment_volumes(
     }
     segment_volume.scintillator_volume.setSensitiveDetector(sensitive_detector);
 
-    if (segment_volume.place_spacer) {
-      segment_volume.spacer_volume = Volume(
-          detector_name + "_spacer" + segment_suffix,
-          Box(
-              geo_parameters.half_width_x,
-              geo_parameters.half_width_y,
-              segment_volume.spacer_half_thickness),
-          spacer_material);
-      if (spacer_vis.isValid()) {
-        segment_volume.spacer_volume.setVisAttributes(spacer_vis);
-      }
+    segment_volume.spacer_volume = Volume(
+        detector_name + "_spacer" + segment_suffix,
+        Box(
+            geo_parameters.half_width_x,
+            geo_parameters.half_width_y,
+            segment_volume.spacer_half_thickness),
+        spacer_material);
+    if (spacer_vis.isValid()) {
+      segment_volume.spacer_volume.setVisAttributes(spacer_vis);
     }
 
     segment_volumes.push_back(segment_volume);
@@ -414,14 +311,7 @@ static Ref_t factory(Detector& detector, xml_h xml_handle, SensitiveDetector sen
   GeoParameters geo_parameters = read_parameters(xml_handle);
   const std::vector<ResolvedSegment> resolved_segments =
       resolve_segments(geo_parameters, minimum_build_thickness);
-  const bool has_spacer_material = !is_sentinel_material(geo_parameters.spacer_material_name);
-
-  bool place_any_spacer = false;
-  const double detector_thickness = get_detector_thickness(
-      resolved_segments,
-      has_spacer_material,
-      place_any_spacer,
-      minimum_build_thickness);
+  const double detector_thickness = get_detector_thickness(resolved_segments);
   const double half_detector_thickness = 0.5 * detector_thickness;
   const bool place_positive_side = geo_parameters.side != "-z";
   const double detector_center_z =
@@ -434,10 +324,8 @@ static Ref_t factory(Detector& detector, xml_h xml_handle, SensitiveDetector sen
       require_material(detector, geo_parameters.absorber_material_name);
   const Material scintillator_material =
       require_material(detector, geo_parameters.active_material_name);
-  Material spacer_material;
-  if (place_any_spacer) {
-    spacer_material = require_material(detector, geo_parameters.spacer_material_name);
-  }
+  const Material spacer_material =
+      require_material(detector, geo_parameters.spacer_material_name);
 
   const VisAttr detector_vis = detector.visAttributes("HCALVis");
   const VisAttr spacer_vis = detector.visAttributes("SpacerVis");
@@ -467,11 +355,9 @@ static Ref_t factory(Detector& detector, xml_h xml_handle, SensitiveDetector sen
       absorber_material,
       scintillator_material,
       spacer_material,
-      has_spacer_material,
       absorber_vis,
       scintillator_vis,
-      spacer_vis,
-      minimum_build_thickness);
+      spacer_vis);
 
   // Advance by half-thickness so each slice is placed at its center.
   double local_z = -half_detector_thickness;
@@ -486,13 +372,11 @@ static Ref_t factory(Detector& detector, xml_h xml_handle, SensitiveDetector sen
           .addPhysVolID("slice", 0);
       local_z += segment_volume.absorber_half_thickness;
 
-      if (segment_volume.place_spacer) {
-        local_z += segment_volume.spacer_half_thickness;
-        detector_volume.placeVolume(segment_volume.spacer_volume, Position(0, 0, local_z))
-            .addPhysVolID("layer", layer_index)
-            .addPhysVolID("slice", 1);
-        local_z += segment_volume.spacer_half_thickness;
-      }
+      local_z += segment_volume.spacer_half_thickness;
+      detector_volume.placeVolume(segment_volume.spacer_volume, Position(0, 0, local_z))
+          .addPhysVolID("layer", layer_index)
+          .addPhysVolID("slice", 1);
+      local_z += segment_volume.spacer_half_thickness;
 
       local_z += segment_volume.scintillator_half_thickness;
       detector_volume.placeVolume(segment_volume.scintillator_volume, Position(0, 0, local_z))
@@ -500,13 +384,11 @@ static Ref_t factory(Detector& detector, xml_h xml_handle, SensitiveDetector sen
           .addPhysVolID("slice", 2);
       local_z += segment_volume.scintillator_half_thickness;
 
-      if (segment_volume.place_spacer) {
-        local_z += segment_volume.spacer_half_thickness;
-        detector_volume.placeVolume(segment_volume.spacer_volume, Position(0, 0, local_z))
-            .addPhysVolID("layer", layer_index)
-            .addPhysVolID("slice", 3);
-        local_z += segment_volume.spacer_half_thickness;
-      }
+      local_z += segment_volume.spacer_half_thickness;
+      detector_volume.placeVolume(segment_volume.spacer_volume, Position(0, 0, local_z))
+          .addPhysVolID("layer", layer_index)
+          .addPhysVolID("slice", 3);
+      local_z += segment_volume.spacer_half_thickness;
     }
   }
 

@@ -60,9 +60,16 @@
       <parameter name="zmin"        value="0.35*m"/>
       <parameter name="side"        value="-z"/>
       <parameter name="nLayers"     value="10"/>
+      <parameter name="seg1_layers" value="3"/>
+      <parameter name="seg2_layers" value="3"/>
+      <parameter name="seg3_layers" value="4"/>
       <parameter name="t_spacer"    value="0.1*cm"/>
-      <parameter name="t_scin"      value="0.4*cm"/>
-      <parameter name="t_absorber"  value="4.0*cm"/>
+      <parameter name="t_absorber_seg1" value="4.0*cm"/>
+      <parameter name="t_scin_seg1"     value="0.4*cm"/>
+      <parameter name="t_absorber_seg2" value="4.0*cm"/>
+      <parameter name="t_scin_seg2"     value="0.4*cm"/>
+      <parameter name="t_absorber_seg3" value="4.0*cm"/>
+      <parameter name="t_scin_seg3"     value="0.4*cm"/>
       <parameter name="absorberMaterial" value="StainlessSteelSAE304"/>
       <parameter name="activeMaterial"   value="Polystyrene"/>
       <parameter name="spacerMaterial"   value="Air"/>

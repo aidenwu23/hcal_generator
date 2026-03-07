@@ -16,6 +16,15 @@ PROJECT_DIRECTORY = Path(__file__).resolve().parents[1]
 DEFAULT_TEMPLATE_PATH = "geometries/templates/hcal_template.xml"
 DEFAULT_OUTPUT_DIRECTORY = "geometries/generated"
 RESERVED_PARAMETER_KEYS = {"geometry_id"}
+LEGACY_PARAMETER_KEYS = {
+    "t_absorber",
+    "t_scin",
+    "t_tape",
+    "tapeMaterial",
+    "t_spacer_seg1",
+    "t_spacer_seg2",
+    "t_spacer_seg3",
+}
 NUMERIC_PATTERN = re.compile(r"^[+-]?\d+(?:\.\d+)?$")
 
 
@@ -110,18 +119,53 @@ def set_detector_parameter(detector_element: xml_tree.Element, key_text: str, va
     new_parameter.set("value", value_text)
 
 
-def normalize_spacer_parameters(parameter_values: Dict[str, str]) -> None:
-    if "spacerMaterial" not in parameter_values and "tapeMaterial" in parameter_values:
-        parameter_values["spacerMaterial"] = parameter_values["tapeMaterial"]
-    if "t_spacer" not in parameter_values and "t_tape" in parameter_values:
-        parameter_values["t_spacer"] = parameter_values["t_tape"]
+def parse_int_value(value_text: str, key_text: str) -> int:
+    try:
+        return int(float(value_text))
+    except ValueError as error:
+        raise ValueError(f"{key_text} must be an integer-like value.") from error
 
-    spacer_material_text = parameter_values.get("spacerMaterial", "").strip().lower()
-    if spacer_material_text in {"", "-1", "none", "false"}:
-        parameter_values.pop("spacerMaterial", None)
-        parameter_values.setdefault("t_spacer", "0*mm")
-    else:
-        parameter_values.setdefault("t_spacer", "0.05*mm")
+
+def validate_parameter_contract(parameter_values: Dict[str, str]) -> None:
+    legacy_keys = sorted(key_text for key_text in parameter_values if key_text in LEGACY_PARAMETER_KEYS)
+    if legacy_keys:
+        joined_keys = ", ".join(legacy_keys)
+        raise ValueError(
+            "Legacy HCAL parameters are no longer supported: "
+            f"{joined_keys}. Use t_spacer, spacerMaterial, "
+            "t_absorber_seg1/2/3, and t_scin_seg1/2/3."
+        )
+
+    required_keys = [
+        "seg1_layers",
+        "seg2_layers",
+        "seg3_layers",
+        "t_spacer",
+        "spacerMaterial",
+        "t_absorber_seg1",
+        "t_absorber_seg2",
+        "t_absorber_seg3",
+        "t_scin_seg1",
+        "t_scin_seg2",
+        "t_scin_seg3",
+    ]
+    missing_keys = [key_text for key_text in required_keys if str(parameter_values.get(key_text, "")).strip() == ""]
+    if missing_keys:
+        joined_keys = ", ".join(missing_keys)
+        raise ValueError(f"Missing required HCAL parameters: {joined_keys}")
+
+    layer_count = parse_int_value(str(parameter_values.get("nLayers", "")), "nLayers")
+    segment_layer_counts = [
+        parse_int_value(str(parameter_values["seg1_layers"]), "seg1_layers"),
+        parse_int_value(str(parameter_values["seg2_layers"]), "seg2_layers"),
+        parse_int_value(str(parameter_values["seg3_layers"]), "seg3_layers"),
+    ]
+    if layer_count <= 0:
+        raise ValueError("nLayers must be positive.")
+    if any(segment_layer_count <= 0 for segment_layer_count in segment_layer_counts):
+        raise ValueError("seg1_layers, seg2_layers, and seg3_layers must all be positive.")
+    if sum(segment_layer_counts) != layer_count:
+        raise ValueError("seg1_layers + seg2_layers + seg3_layers must equal nLayers.")
 
 
 def compute_geometry_id(parameter_values: Dict[str, str]) -> str:
@@ -199,7 +243,7 @@ def main() -> None:
         parameter_values[key_text] = value_text
 
     parameter_values.setdefault("side", "-z")
-    normalize_spacer_parameters(parameter_values)
+    validate_parameter_contract(parameter_values)
     geometry_id = compute_geometry_id(parameter_values)
     output_xml_path, output_parameter_path = choose_output_paths(arguments, geometry_id)
 
