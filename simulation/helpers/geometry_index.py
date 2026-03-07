@@ -22,6 +22,8 @@ UNIT_MM: Dict[str, float] = {
 }
 
 
+# Convert the DD4hep-style strings used in the geometry files into millimeters so the rest
+# of the geometry helpers can work with one consistent depth unit.
 def eval_length_mm(value: object, *, default: float = 0.0) -> float:
     """Evaluate a DD4hep-style length expression in millimeter."""
     if value is None:
@@ -42,6 +44,7 @@ def eval_length_mm(value: object, *, default: float = 0.0) -> float:
                 return default
     return default
 
+# One generated geometry plus the paths and parameter payload that describe it.
 @dataclass
 class GeometryVariant:
     geometry_id: str
@@ -61,6 +64,7 @@ class GeometryVariant:
         return str(self.params.get("side", "-z"))
 
 
+# One physical HCAL layer after the three longitudinal segments have been expanded.
 @dataclass
 class GeometryLayerRow:
     layer_index: int
@@ -75,6 +79,7 @@ class GeometryLayerRow:
     scintillator_depth_mid_mm: float
 
 
+# Compact depth numbers derived from the expanded layer stack.
 @dataclass
 class GeometryLayerSummary:
     total_depth_mm: float
@@ -82,6 +87,7 @@ class GeometryLayerSummary:
     absorber_fraction_by_depth: float
 
 
+# The repeated layer recipe for one longitudinal HCAL segment.
 @dataclass
 class GeometrySegmentRecipe:
     segment_index: int
@@ -91,12 +97,15 @@ class GeometrySegmentRecipe:
     spacer_thickness_mm: float
 
 
+# Ask the sweep script what geometries a set of sweep specs would produce without building
+# any further metadata by hand in this helper.
 def inspect_geometry_rows(python_bin: str, spec_paths: Iterable[Path]) -> List[Dict[str, object]]:
     """Ask the sweep script for the geometry rows implied by the requested specs."""
     sweep_script = GEOMETRY_DIRECTORY / "sweep_geometries.py"
     if not sweep_script.exists():
         raise FileNotFoundError(f"{sweep_script} not found.")
     command = [python_bin, str(sweep_script), "--dry-run"]
+    # Pass every requested spec to the sweep helper so the geometry list matches conductor.
     for spec_path in spec_paths:
         command.extend(["--spec", str(spec_path)])
     result = subprocess.run(
@@ -116,6 +125,7 @@ def inspect_geometry_rows(python_bin: str, spec_paths: Iterable[Path]) -> List[D
     return geometry_rows
 
 
+# Turn the dry-run sweep rows into strongly typed geometry records with validated paths.
 def load_geometry_variants(
     geometry_rows: Iterable[Dict[str, object]],
     *,
@@ -124,6 +134,8 @@ def load_geometry_variants(
     """Compile geometry metadata from dry-run sweep rows."""
     geometry_variants: List[GeometryVariant] = []
     for geometry_row in geometry_rows:
+        # Resolve the geometry file locations first so the later consistency checks compare
+        # stable absolute paths rather than mixed relative path strings.
         geometry_directory = _resolve_project_path(str(geometry_row["geometry_directory"]))
         params_path = _resolve_project_path(str(geometry_row["json_path"]))
         xml_path = _resolve_project_path(str(geometry_row["xml_path"]))
@@ -142,6 +154,8 @@ def load_geometry_variants(
         if require_geometry_files:
             _validate_geometry_files(geometry_id, params_path, xml_path)
         spec_path = _resolve_project_path(str(geometry_row["spec_path"]))
+        # Keep the generated parameter payload attached to the geometry record because the HCAL
+        # stack builder uses those values directly instead of reverse-engineering the compact XML.
         geometry_variants.append(
             GeometryVariant(
                 geometry_id=geometry_id,
@@ -156,6 +170,7 @@ def load_geometry_variants(
     return geometry_variants
 
 
+# Translate the generated HCAL depth and detector side into the world z-range used by simulation.
 def derive_thickness_and_zrange(geometry_variant: GeometryVariant) -> Tuple[float, float, float]:
     """Return (thickness_mm, zmin_mm_world, zmax_mm_world) from geometry params."""
     layer_rows = build_layer_stack(geometry_variant)
@@ -172,6 +187,8 @@ def derive_thickness_and_zrange(geometry_variant: GeometryVariant) -> Tuple[floa
     return total_thickness, zmin_world, zmax_world
 
 
+# Resolve project-relative helper paths in one place so the rest of the module can work with
+# absolute paths.
 def _resolve_project_path(path_text: str) -> Path:
     raw_path = Path(path_text).expanduser()
     if raw_path.is_absolute():
@@ -179,6 +196,8 @@ def _resolve_project_path(path_text: str) -> Path:
     return (PROJECT_DIRECTORY / raw_path).resolve()
 
 
+# Make sure the generated geometry files exist and that the JSON payload matches the expected
+# geometry identity.
 def _validate_geometry_files(geometry_id: str, params_path: Path, xml_path: Path) -> None:
     if not params_path.exists():
         raise FileNotFoundError(f"Params JSON missing: {params_path}")
@@ -191,6 +210,7 @@ def _validate_geometry_files(geometry_id: str, params_path: Path, xml_path: Path
         raise ValueError(f"Geometry ID mismatch in {params_path}")
 
 
+# Expand the three-segment HCAL description into one physical layer row per built layer.
 def build_layer_stack(geometry_variant: GeometryVariant) -> List[GeometryLayerRow]:
     """Expand the generated 3-segment HCAL into one physical row per layer."""
     segment_recipes = _resolve_segment_recipes(geometry_variant)
@@ -198,6 +218,7 @@ def build_layer_stack(geometry_variant: GeometryVariant) -> List[GeometryLayerRo
     layer_rows: List[GeometryLayerRow] = []
     running_depth_mm = 0.0
     layer_index = 0
+    # Walk segment by segment so the output rows follow the same longitudinal ordering as the HCAL plugin.
     for segment_recipe in segment_recipes:
         layer_total_thickness_mm = (
             segment_recipe.absorber_thickness_mm
@@ -205,6 +226,8 @@ def build_layer_stack(geometry_variant: GeometryVariant) -> List[GeometryLayerRo
             + 2.0 * segment_recipe.spacer_thickness_mm
         )
         for _ in range(segment_recipe.layer_count):
+            # Record the front, middle, and back of each physical layer so later studies can
+            # place observables anywhere through the stack.
             depth_front_mm = running_depth_mm
             absorber_depth_mid_mm = depth_front_mm + 0.5 * segment_recipe.absorber_thickness_mm
             scintillator_front_mm = (
@@ -238,6 +261,7 @@ def build_layer_stack(geometry_variant: GeometryVariant) -> List[GeometryLayerRo
     return layer_rows
 
 
+# Reduce the expanded stack to the geometry-level depth numbers used by later analysis steps.
 def summarize_layer_stack(layer_rows: List[GeometryLayerRow]) -> GeometryLayerSummary:
     """Reduce the layer rows to the geometry-level depth scalars."""
     if not layer_rows:
@@ -257,12 +281,14 @@ def summarize_layer_stack(layer_rows: List[GeometryLayerRow]) -> GeometryLayerSu
     )
 
 
+# Recover the three contiguous longitudinal segment recipes from the generated HCAL parameter set.
 def _resolve_segment_recipes(geometry_variant: GeometryVariant) -> List[GeometrySegmentRecipe]:
     """Build the three contiguous longitudinal segment recipes used by the HCAL plugin."""
     geometry_parameters = geometry_variant.params
     if geometry_variant.n_layers <= 0:
         raise ValueError("Generated HCAL geometry must define a positive nLayers.")
 
+    # The generated HCAL contract requires exactly three positive segment counts that sum to nLayers.
     segment_layer_counts = [
         int(geometry_parameters.get("seg1_layers", 0) or 0),
         int(geometry_parameters.get("seg2_layers", 0) or 0),
@@ -277,6 +303,7 @@ def _resolve_segment_recipes(geometry_variant: GeometryVariant) -> List[Geometry
 
     base_spacer_mm = eval_length_mm(geometry_parameters.get("t_spacer"), default=0.0)
 
+    # Build one repeated layer recipe for each longitudinal segment.
     segment_recipes: List[GeometrySegmentRecipe] = []
     for segment_index, segment_layer_count in enumerate(segment_layer_counts, start=1):
         absorber_thickness_mm = eval_length_mm(

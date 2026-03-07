@@ -13,6 +13,7 @@ void calibrate_neutron_response(const char* events_path_cstr,
                                 double gun_energy_GeV,
                                 double muon_threshold_GeV,
                                 const char* out_json_cstr) {
+  // Validate the calibration inputs before touching the ROOT file.
   if (!events_path_cstr || std::string(events_path_cstr).empty()) {
     std::cerr << "[calibrate_neutron_response] events.root path is required.\n";
     return;
@@ -34,6 +35,7 @@ void calibrate_neutron_response(const char* events_path_cstr,
   const std::string out_json_path(out_json_cstr);
   const double mc_rel_diff_limit = 0.1;
 
+  // Open the processed events tree that carries truth and visible energy for each event.
   TFile input_file(events_path.c_str(), "READ");
   if (input_file.IsZombie()) {
     std::cerr << "[calibrate_neutron_response] Failed to open " << events_path << ".\n";
@@ -52,6 +54,7 @@ void calibrate_neutron_response(const char* events_path_cstr,
     return;
   }
 
+  // Connect to the branches needed for the neutron visible-to-truth calibration.
   float mc_E = 0.0F;
   float visible_E = 0.0F;
   std::string* category_ptr = nullptr;
@@ -65,15 +68,19 @@ void calibrate_neutron_response(const char* events_path_cstr,
   double detected_visible_energy_sum_GeV = 0.0;
   double detected_truth_energy_sum_GeV = 0.0;
 
+  // Keep only detected neutron events that match the requested gun energy closely enough
+  // to belong to this calibration sample.
   const Long64_t entry_count = tree->GetEntries();
   for (Long64_t entry_index = 0; entry_index < entry_count; ++entry_index) {
     tree->GetEntry(entry_index);
 
+    // Ignore any non-event bookkeeping rows that may live in the same tree.
     const std::string category = (category_ptr != nullptr) ? *category_ptr : std::string();
     if (!category.empty() && category != "events") {
       continue;
     }
 
+    // The calibration should only use events whose truth energy matches the nominal gun setting.
     const double truth_energy_GeV = static_cast<double>(mc_E);
     if (truth_energy_GeV <= 0.0) {
       continue;
@@ -83,11 +90,13 @@ void calibrate_neutron_response(const char* events_path_cstr,
       continue;
     }
 
+    // The muon-calibrated detect threshold defines which neutron events count as detected.
     const double visible_energy_GeV = static_cast<double>(visible_E);
     if (visible_energy_GeV < muon_threshold_GeV) {
       continue;
     }
 
+    // Accumulate the visible and truth energy sums that define the neutron response scale.
     detected_event_count++;
     detected_visible_energy_sum_GeV += visible_energy_GeV;
     detected_truth_energy_sum_GeV += truth_energy_GeV;
@@ -98,13 +107,14 @@ void calibrate_neutron_response(const char* events_path_cstr,
     return;
   }
 
-  // This value will be used as the sampling fraction.
+  // The neutron scale is the average visible-to-truth response over the detected sample.
   const double neutron_scale = detected_visible_energy_sum_GeV / detected_truth_energy_sum_GeV;
   if (!std::isfinite(neutron_scale) || neutron_scale <= 0.0) {
     std::cerr << "[calibrate_neutron_response] Computed neutron_scale is not finite and positive.\n";
     return;
   }
 
+  // Write the calibration constant in a small JSON file that later processing steps can load.
   std::ofstream output_file(out_json_path);
   if (!output_file) {
     std::cerr << "[calibrate_neutron_response] Failed to open " << out_json_path

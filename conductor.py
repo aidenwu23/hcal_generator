@@ -48,6 +48,7 @@ from simulation.helpers.run_steps import (
 PROJECT_DIRECTORY = Path(__file__).resolve().parent
 
 
+# Collect the runtime switches that define one orchestration pass over the geometry set.
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Orchestrate neutron HCAL production runs.")
     parser.add_argument("--spec", "-s", nargs="+", required=True, help="Sweep spec(s) to materialise (YAML).")
@@ -92,6 +93,8 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+# Resolve CLI paths relative to the project root so conductor.py behaves the same whether it
+# is launched from the repo root or from somewhere else.
 def resolve_runtime_path(path_text: str) -> Path:
     raw_path = Path(path_text).expanduser()
     if raw_path.is_absolute():
@@ -99,19 +102,26 @@ def resolve_runtime_path(path_text: str) -> Path:
     return (PROJECT_DIRECTORY / raw_path).resolve()
 
 
+# Normalize every requested sweep spec into an absolute path before the geometry pipeline runs.
 def resolve_spec_paths(spec_texts: List[str]) -> List[Path]:
     return [resolve_runtime_path(spec_text) for spec_text in spec_texts]
 
 
+# Run one full campaign pass: materialize geometries, build run plans, execute each run,
+# then write the manifest that records what completed, skipped, or failed.
 def main() -> None:
     args = parse_args()
+
+    # Resolve the runtime file locations once so the helper calls below all see stable paths.
     args.process_bin = str(resolve_runtime_path(args.process_bin))
     args.manifest_json = str(resolve_runtime_path(args.manifest_json))
     args.manifest_csv = str(resolve_runtime_path(args.manifest_csv))
 
+    # Turn the requested sweep specs into generated geometries before any run planning starts.
     spec_paths = resolve_spec_paths(args.spec)
     maybe_run_sweeps(args, spec_paths)
 
+    # Build the in-memory geometry list that every downstream run will reference.
     geometry_rows = inspect_geometry_rows(args.python, spec_paths)
     require_geometry_files = args.skip_sweep or not args.dry_run
     geometry_variants = load_geometry_variants(
@@ -122,11 +132,16 @@ def main() -> None:
         print("No geometry variants found; nothing to do.")
         return
 
+    # Prepare the processor flags and validate that the start-layer threshold is controlled
+    # through the dedicated conductor options rather than ad hoc processor extras.
     extra_process_flags = flatten_process_extras(args.process_extra)
     if "--start-threshold" in extra_process_flags:
         raise ValueError("Pass start threshold scaling with --start-alpha instead of --process-extra.")
     if args.start_alpha <= 0.0:
         raise ValueError("--start-alpha must be positive.")
+
+    # Non-muon production needs a muon control sample first so each geometry gets a calibrated
+    # visible-energy threshold before the shower-start proxy is evaluated.
     muon_threshold_by_geometry_id: Dict[str, float] = {}
     gun_particle = args.gun_particle.strip().lower()
     running_muon_sample = gun_particle in ("mu-", "mu+")
@@ -143,14 +158,19 @@ def main() -> None:
                 raise ValueError(f"muon_threshold_GeV missing in {calibration_json_path}")
             muon_threshold_by_geometry_id[geometry_variant.geometry_id] = float(threshold_value)
 
+    # Expand the geometry set, energies, and seeds into the concrete list of ddsim runs.
     run_plans = build_run_plans(args, geometry_variants, extra_process_flags)
     if not run_plans:
         print("No run plans generated; adjust seeds/energies.")
         return
 
+    # Execute each planned run in order and keep a record of timing, status, and failures
+    # so the manifest at the end reflects the full campaign history.
     run_records: List[RunRecord] = []
     for run_plan in run_plans:
         run_record = RunRecord(plan=run_plan, status="pending")
+
+        # Reuse existing event files unless the user explicitly asked to overwrite them.
         if not args.overwrite and run_plan.events_path.exists():
             run_record.status = "skipped_existing"
             run_records.append(run_record)
@@ -160,6 +180,8 @@ def main() -> None:
         saved_muon_threshold = args.muon_threshold
 
         try:
+            # For non-muon production, convert the per-geometry muon control threshold into the
+            # start-layer threshold used by the processor.
             resolved_start_threshold = None
             neutron_scale = None
             if not running_muon_sample:
@@ -169,6 +191,8 @@ def main() -> None:
                 args.muon_threshold = muon_threshold_by_geometry_id[geometry_id]
                 resolved_start_threshold = args.start_alpha * args.muon_threshold
 
+            # Run the detector simulation first, then process the output, then attach any
+            # calibration and performance products that belong to this sample type.
             run_record.ddsim_seconds = run_ddsim(args, run_plan)
             run_record.process_seconds, _ = run_process(
                 args,
@@ -184,16 +208,19 @@ def main() -> None:
                 run_record.performance_seconds = run_performance_analysis(args, run_plan)
             run_record.status = "completed"
         except subprocess.CalledProcessError as exc:
+            # Keep the shell command and exit code so failed external steps are visible in the manifest.
             run_record.status = "failed"
             run_record.error = f"{exc.cmd} -> exit {exc.returncode}"
         except Exception as exc:
             run_record.status = "failed"
             run_record.error = str(exc)
         finally:
+            # Restore the caller-level muon threshold before moving to the next planned run.
             args.muon_threshold = saved_muon_threshold
 
         run_records.append(run_record)
 
+    # Write the run manifest after every planned run has either completed, failed, or been skipped.
     write_run_manifests(run_records, Path(args.manifest_json), Path(args.manifest_csv))
     completed = sum(1 for run_record in run_records if run_record.status == "completed")
     skipped = sum(1 for run_record in run_records if run_record.status.startswith("skipped"))

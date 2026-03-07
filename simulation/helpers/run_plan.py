@@ -34,11 +34,13 @@ PARTICLE_PDG: Dict[str, int] = {
 }
 
 
+# Translate the conductor particle names into the PDG codes expected by the processor.
 def lookup_pdg(particle: str) -> Optional[int]:
     """Translate a human-readable particle name into a PDG code when possible."""
     return PARTICLE_PDG.get(particle.strip().lower())
 
 
+# One fully expanded simulation run, including all file paths that later execution steps need.
 @dataclass
 class RunPlan:
     geometry_variant: GeometryVariant
@@ -58,6 +60,7 @@ class RunPlan:
     expected_pdg: Optional[int]
 
 
+# Per-run bookkeeping that records status, timing, and any failure message after execution.
 @dataclass
 class RunRecord:
     plan: RunPlan
@@ -71,6 +74,8 @@ class RunRecord:
     sim_collection: Optional[str] = None
 
 
+# Build a deterministic run identity from the geometry, beam settings, and processing extras
+# so the same physical configuration always maps to the same run id.
 def compute_run_id(
     geometry_id: str,
     particle: str,
@@ -96,6 +101,7 @@ def compute_run_id(
     return run_id, run_id_int
 
 
+# Expand the geometry list, energies, and seeds into the concrete run list that conductor executes.
 def build_run_plans(
     args: argparse.Namespace,
     geometry_variants: List[GeometryVariant],
@@ -104,10 +110,14 @@ def build_run_plans(
     run_plans: List[RunPlan] = []
     seed_values: List[Optional[int]] = list(args.seeds) if args.seeds is not None else [None]
     for geometry_variant in geometry_variants:
+        # Include the processor extras, geometry tag, and detector side in the run identity so
+        # distinct physical or processing configurations do not collide onto the same run id.
         run_id_tokens = list(extra_process_flags) + [geometry_variant.tag or "", geometry_variant.side]
         expected_pdg = args.expected_pdg if args.expected_pdg is not None else lookup_pdg(args.gun_particle)
         gun_direction = geometry_variant.params.get("gun.direction", args.gun_direction)
         gun_position = geometry_variant.params.get("gun.position", args.gun_position)
+
+        # Sweep over every requested seed and energy for this geometry to materialize the full run grid.
         for seed in seed_values:
             for energy in args.gun_energy:
                 run_id, run_id_int = compute_run_id(
@@ -118,6 +128,7 @@ def build_run_plans(
                     args.events_per_run,
                     run_id_tokens,
                 )
+                # Keep the raw EDM4hep file and the processed outputs in their standard campaign locations.
                 raw_output_directory = DATA_DIRECTORY / "raw" / geometry_variant.geometry_id
                 processed_output_directory = DATA_DIRECTORY / "processed" / geometry_variant.geometry_id / run_id
                 run_plans.append(
