@@ -18,12 +18,12 @@ import yaml
 PROJECT_DIRECTORY = Path(__file__).resolve().parents[1]
 
 LAYER_THICKNESS_BOUNDS = [
-    ("t_absorber_seg1", 1.2, 2.2),
-    ("t_scin_seg1", 0.35, 0.45),
-    ("t_absorber_seg2", 1.2, 2.2),
-    ("t_scin_seg2", 0.35, 0.45),
-    ("t_absorber_seg3", 1.2, 2.2),
-    ("t_scin_seg3", 0.35, 0.45),
+    ("t_absorber_seg1", 3.5, 4.5),
+    ("t_scin_seg1", 0.3, 0.6),
+    ("t_absorber_seg2", 3.5, 4.5),
+    ("t_scin_seg2", 0.3, 0.6),
+    ("t_absorber_seg3", 3.5, 4.5),
+    ("t_scin_seg3", 0.3, 0.6),
 ]
 
 

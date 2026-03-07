@@ -60,7 +60,7 @@
       <parameter name="zmin"        value="0.35*m"/>
       <parameter name="side"        value="-z"/>
       <parameter name="nLayers"     value="10"/>
-      <parameter name="t_spacer"    value="10*mm"/>
+      <parameter name="t_spacer"    value="0.1*cm"/>
       <parameter name="t_scin"      value="2.4*cm"/>
       <parameter name="t_absorber"  value="4.0*cm"/>
       <parameter name="absorberMaterial" value="StainlessSteelSAE304"/>
