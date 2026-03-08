@@ -82,12 +82,12 @@ def run_muon_calibration(args: argparse.Namespace, geometry_variant: GeometryVar
         print(f"[muon_calib] Skipping calibration for {geometry_variant.geometry_id}, output exists at {output_path}")
         return output_path
 
-    # The muon control sample runs through the same ddsim and processor chain, then calibrate_fpr.py
-    # extracts the false-positive target threshold from the visible-energy distribution.
+    # Muons are minimum-ionizing particles, so they produce a well-defined, small visible-energy
+    # deposit with no hadronic response. The muon control sample runs through the same ddsim and
+    # processor chain, then calibrate_fpr.py fits the visible-energy distribution and returns the
+    # threshold that keeps the false-positive rate at the requested level.
     raw_output_path = DATA_DIRECTORY / "raw" / geometry_variant.geometry_id / "run_mu_ctrl" / "run_mu_ctrl.edm4hep.root"
     ensure_dir(raw_output_path.parent)
-    events_output_path = calibration_directory / "events.root"
-    json_output_path = calibration_directory / "fpr_calibration.json"
     command = [
         args.python,
         str(SIMULATION_DIRECTORY / "calibration" / "calibrate_fpr.py"),
@@ -96,9 +96,9 @@ def run_muon_calibration(args: argparse.Namespace, geometry_variant: GeometryVar
         "--raw-out",
         str(raw_output_path),
         "--events-out",
-        str(events_output_path),
+        str(calibration_directory / "events.root"),
         "--json-out",
-        str(json_output_path),
+        str(output_path),
         "--ddsim",
         args.ddsim,
         "--process-bin",
@@ -117,7 +117,7 @@ def run_muon_calibration(args: argparse.Namespace, geometry_variant: GeometryVar
         "0.01",
     ]
     run_cmd(command, dry_run=args.dry_run, label="muon_calibration")
-    return json_output_path
+    return output_path
 
 
 # Run the detector simulation step for one planned sample and return its wall-clock time.
@@ -200,7 +200,7 @@ def write_metadata(
     if args.dry_run:
         print(f"[meta] write {run_plan.meta_path}")
         return time.time() - start
-    run_plan.meta_path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_dir(run_plan.meta_path.parent)
     with run_plan.meta_path.open("w", encoding="utf-8") as metadata_file:
         json.dump(payload, metadata_file, indent=2)
     print(f"[meta] wrote {run_plan.meta_path}")
@@ -212,7 +212,7 @@ def write_calibration(
     args: argparse.Namespace,
     run_plan: RunPlan,
     neutron_scale: Optional[float] = None,
-) -> float:
+) -> None:
     """Write calibration.json with the run-level calibration constants."""
     payload: Dict[str, Any] = {
         "muon_threshold_GeV": args.muon_threshold,
@@ -221,15 +221,13 @@ def write_calibration(
     # Add the neutron response scale only for runs where that calibration was actually derived.
     if neutron_scale is not None:
         payload["neutron_scale"] = neutron_scale
-    start = time.time()
     if args.dry_run:
         print(f"[calibration] write {run_plan.calibration_path}")
-        return time.time() - start
-    run_plan.calibration_path.parent.mkdir(parents=True, exist_ok=True)
+        return
+    ensure_dir(run_plan.calibration_path.parent)
     with run_plan.calibration_path.open("w", encoding="utf-8") as calibration_file:
         json.dump(payload, calibration_file, indent=2)
     print(f"[calibration] wrote {run_plan.calibration_path}")
-    return time.time() - start
 
 
 # Derive the neutron visible-to-truth response scale from the processed events tree for one run.

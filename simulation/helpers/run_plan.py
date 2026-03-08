@@ -70,8 +70,6 @@ class RunRecord:
     process_seconds: Optional[float] = None
     performance_seconds: Optional[float] = None
     meta_seconds: Optional[float] = None
-    mc_collection: Optional[str] = None
-    sim_collection: Optional[str] = None
 
 
 # Build a deterministic run identity from the geometry, beam settings, and processing extras

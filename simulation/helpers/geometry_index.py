@@ -48,20 +48,16 @@ def eval_length_mm(value: object, *, default: float = 0.0) -> float:
     return default
 
 
-# The generated HCAL sweep points use bare numbers for thickness values, but they should be 
-# in centimeters, so we multiply it by 10 and reuse the eval_length_mm on it.
+# Bare numbers in the sweep parameter files are in centimeters, so multiply by 10 to get mm.
+# Anything with an explicit unit suffix (like "1.5*cm") falls through to eval_length_mm,
+# which handles the unit conversion itself. None and empty strings also fall through and
+# return the default.
 def eval_segment_length_mm(value: object, *, default: float = 0.0) -> float:
     """Evaluate one generated HCAL segment thickness in millimeter."""
-    if value is None:
-        return default
     if isinstance(value, (int, float)):
         return 10.0 * float(value)
-    if isinstance(value, str):
-        expression = value.strip()
-        if not expression:
-            return default
-        if NUMERIC_PATTERN.match(expression):
-            return 10.0 * float(expression)
+    if isinstance(value, str) and NUMERIC_PATTERN.match(value.strip()):
+        return 10.0 * float(value)
     return eval_length_mm(value, default=default)
 
 # One generated geometry plus the paths and parameter payload that describe it.
@@ -321,6 +317,7 @@ def _resolve_segment_recipes(geometry_variant: GeometryVariant) -> List[Geometry
     if sum(segment_layer_counts) != geometry_variant.n_layers:
         raise ValueError("Segment layer counts must sum to nLayers.")
 
+    # The spacer thickness is the same for every layer across all three segments.
     base_spacer_mm = eval_length_mm(geometry_parameters.get("t_spacer"), default=0.0)
 
     # Build one repeated layer recipe for each longitudinal segment.

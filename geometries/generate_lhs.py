@@ -15,7 +15,7 @@ from typing import Dict, List
 
 import yaml
 
-PROJECT_DIRECTORY = Path(__file__).resolve().parents[1]
+from geometry_utils import resolve_project_path
 
 LAYER_THICKNESS_BOUNDS = [
     ("t_absorber_seg1", 3.5, 4.5),
@@ -35,13 +35,6 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
     parser.add_argument("--tag-prefix", default="lhs", help="Variant tag prefix")
     return parser.parse_args()
-
-
-def resolve_project_path(path_text: str) -> Path:
-    raw_path = Path(path_text).expanduser()
-    if raw_path.is_absolute():
-        return raw_path.resolve()
-    return (PROJECT_DIRECTORY / raw_path).resolve()
 
 
 def main() -> int:
@@ -68,14 +61,13 @@ def main() -> int:
     sampler = qmc.LatinHypercube(d=len(LAYER_THICKNESS_BOUNDS), seed=arguments.seed)
     unit_sample = sampler.random(n=arguments.n)
 
-    lower_bounds = [lower for _, lower, _ in LAYER_THICKNESS_BOUNDS]
-    upper_bounds = [upper for _, _, upper in LAYER_THICKNESS_BOUNDS]
+    _, lower_bounds, upper_bounds = zip(*LAYER_THICKNESS_BOUNDS)
     scaled_sample = qmc.scale(unit_sample, lower_bounds, upper_bounds)
 
     variants: List[Dict[str, object]] = []
     for sample_index, sample_row in enumerate(scaled_sample):
         variant: Dict[str, object] = {"tag": f"{arguments.tag_prefix}{sample_index:03d}"}
-        for (parameter_name, _, _), value in zip(LAYER_THICKNESS_BOUNDS, sample_row):
+        for (parameter_name, *_), value in zip(LAYER_THICKNESS_BOUNDS, sample_row):
             variant[parameter_name] = round(float(value), 4)
         variants.append(variant)
 

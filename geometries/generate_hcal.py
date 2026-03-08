@@ -10,21 +10,19 @@ import re
 import xml.etree.ElementTree as xml_tree
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
-PROJECT_DIRECTORY = Path(__file__).resolve().parents[1]
-DEFAULT_TEMPLATE_PATH = "geometries/templates/hcal_template.xml"
+from geometry_utils import (
+    find_target_detector,
+    read_detector_parameters,
+    resolve_project_path,
+    to_project_relative_text,
+    validate_parameter_contract,
+    DEFAULT_TEMPLATE_PATH,
+)
+
 DEFAULT_OUTPUT_DIRECTORY = "geometries/generated"
 RESERVED_PARAMETER_KEYS = {"geometry_id"}
-INVALID_PARAMETER_KEYS = {
-    "t_absorber",
-    "t_scin",
-    "t_tape",
-    "tapeMaterial",
-    "t_spacer_seg1",
-    "t_spacer_seg2",
-    "t_spacer_seg3",
-}
 NUMERIC_PATTERN = re.compile(r"^[+-]?\d+(?:\.\d+)?$")
 SEGMENT_LENGTH_KEYS = {
     "t_absorber_seg1",
@@ -50,20 +48,6 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def resolve_project_path(path_text: str) -> Path:
-    raw_path = Path(path_text).expanduser()
-    if raw_path.is_absolute():
-        return raw_path.resolve()
-    return (PROJECT_DIRECTORY / raw_path).resolve()
-
-
-def to_project_relative_text(path: Path) -> str:
-    try:
-        return str(path.relative_to(PROJECT_DIRECTORY))
-    except ValueError:
-        return str(path)
-
-
 def parse_set_assignment(assignment_text: str) -> Tuple[str, str]:
     if "=" not in assignment_text:
         raise ValueError(f"Invalid --set value: {assignment_text}")
@@ -73,48 +57,6 @@ def parse_set_assignment(assignment_text: str) -> Tuple[str, str]:
     if not key_text:
         raise ValueError(f"Invalid --set key: {assignment_text}")
     return key_text, value_text
-
-
-def find_target_detector(
-    root_element: xml_tree.Element,
-    detector_name: Optional[str],
-    detector_type: Optional[str],
-) -> xml_tree.Element:
-    detectors_element = root_element.find("detectors")
-    if detectors_element is None:
-        raise RuntimeError("Template is missing <detectors> section")
-
-    detector_elements = detectors_element.findall("detector")
-    if not detector_elements:
-        raise RuntimeError("Template has no <detector> entries")
-
-    if detector_name and detector_type:
-        for detector_element in detector_elements:
-            if detector_element.get("name") == detector_name and detector_element.get("type") == detector_type:
-                return detector_element
-
-    if detector_name:
-        for detector_element in detector_elements:
-            if detector_element.get("name") == detector_name:
-                return detector_element
-
-    if detector_type:
-        for detector_element in detector_elements:
-            if detector_element.get("type") == detector_type:
-                return detector_element
-
-    return detector_elements[0]
-
-
-def read_detector_parameters(detector_element: xml_tree.Element) -> Dict[str, str]:
-    parameter_values: Dict[str, str] = {}
-    for parameter_element in detector_element.findall("parameter"):
-        key_text = parameter_element.get("name")
-        value_text = parameter_element.get("value")
-        if key_text is None or value_text is None:
-            continue
-        parameter_values[key_text] = value_text
-    return parameter_values
 
 
 def set_detector_parameter(detector_element: xml_tree.Element, key_text: str, value_text: str) -> None:
@@ -127,60 +69,16 @@ def set_detector_parameter(detector_element: xml_tree.Element, key_text: str, va
     new_parameter.set("value", value_text)
 
 
-def parse_int_value(value_text: str, key_text: str) -> int:
-    try:
-        return int(float(value_text))
-    except ValueError as error:
-        raise ValueError(f"{key_text} must be an integer-like value.") from error
-
-
-def validate_parameter_contract(parameter_values: Dict[str, str]) -> None:
-    invalid_keys = sorted(key_text for key_text in parameter_values if key_text in INVALID_PARAMETER_KEYS)
-    if invalid_keys:
-        joined_keys = ", ".join(invalid_keys)
-        raise ValueError(
-            "Invalid HCAL parameters: "
-            f"{joined_keys}. Use t_spacer, spacerMaterial, "
-            "t_absorber_seg1/2/3, and t_scin_seg1/2/3."
-        )
-
-    required_keys = [
-        "seg1_layers",
-        "seg2_layers",
-        "seg3_layers",
-        "t_spacer",
-        "spacerMaterial",
-        "t_absorber_seg1",
-        "t_absorber_seg2",
-        "t_absorber_seg3",
-        "t_scin_seg1",
-        "t_scin_seg2",
-        "t_scin_seg3",
-    ]
-    missing_keys = [key_text for key_text in required_keys if str(parameter_values.get(key_text, "")).strip() == ""]
-    if missing_keys:
-        joined_keys = ", ".join(missing_keys)
-        raise ValueError(f"Missing required HCAL parameters: {joined_keys}")
-
-    layer_count = parse_int_value(str(parameter_values.get("nLayers", "")), "nLayers")
-    segment_layer_counts = [
-        parse_int_value(str(parameter_values["seg1_layers"]), "seg1_layers"),
-        parse_int_value(str(parameter_values["seg2_layers"]), "seg2_layers"),
-        parse_int_value(str(parameter_values["seg3_layers"]), "seg3_layers"),
-    ]
-    if layer_count <= 0:
-        raise ValueError("nLayers must be positive.")
-    if any(segment_layer_count <= 0 for segment_layer_count in segment_layer_counts):
-        raise ValueError("seg1_layers, seg2_layers, and seg3_layers must all be positive.")
-    if sum(segment_layer_counts) != layer_count:
-        raise ValueError("seg1_layers + seg2_layers + seg3_layers must equal nLayers.")
-
-
+# Hash the full sorted parameter set so any change in physical values produces a different ID.
+# The ID also names the output directory, which means two geometries with the same parameters
+# map to the same directory and will not be regenerated unnecessarily.
 def compute_geometry_id(parameter_values: Dict[str, str]) -> str:
     digest_input = json.dumps(parameter_values, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha1(digest_input).hexdigest()[:8]
 
 
+# Store bare numbers as int or float rather than strings so downstream tools can do
+# arithmetic on them directly without parsing. Non-numeric values are left as strings.
 def convert_json_value(value_text: str) -> object:
     value_text = value_text.strip()
     if NUMERIC_PATTERN.match(value_text):
@@ -243,6 +141,7 @@ def indent_xml(element: xml_tree.Element, level: int = 0) -> None:
 def main() -> None:
     arguments = parse_arguments()
 
+    # Load the template XML and locate the detector element we are going to modify.
     template_path = resolve_project_path(arguments.template)
     if not template_path.exists():
         raise SystemExit(f"Template XML not found: {template_path}")
@@ -251,6 +150,8 @@ def main() -> None:
     root_element = xml_document.getroot()
     detector_element = find_target_detector(root_element, arguments.detector_name, arguments.detector_type)
 
+    # Start from the parameter values already in the template, then let CLI --set flags override them.
+    # Reserved keys like geometry_id are skipped so callers cannot inject a fake ID.
     parameter_values = read_detector_parameters(detector_element)
 
     for assignment_text in arguments.set:
@@ -259,11 +160,13 @@ def main() -> None:
             continue
         parameter_values[key_text] = value_text
 
+    # Validate the merged parameter set and compute a deterministic ID from it.
     parameter_values.setdefault("side", "-z")
     validate_parameter_contract(parameter_values)
     geometry_id = compute_geometry_id(parameter_values)
     output_xml_path, output_parameter_path = choose_output_paths(arguments, geometry_id)
 
+    # Write the resolved parameter values back into the XML so the compact file is self-contained.
     for key_text, value_text in sorted(parameter_values.items()):
         set_detector_parameter(
             detector_element,
@@ -271,11 +174,13 @@ def main() -> None:
             normalize_hcal_parameter_value(key_text, value_text),
         )
 
+    # Build the JSON payload and prepare the output directories before touching any files.
     output_parameter_payload = create_json_payload(parameter_values, geometry_id)
     output_xml_path.parent.mkdir(parents=True, exist_ok=True)
     output_parameter_path.parent.mkdir(parents=True, exist_ok=True)
 
-    tag_text = arguments.tag if arguments.tag else geometry_id
+    # Build a human-readable provenance block and embed it as a comment at the top of the XML.
+    tag_text = arguments.tag or geometry_id
     parameter_source_text = to_project_relative_text(output_parameter_path)
 
     comment_lines = [
@@ -298,6 +203,8 @@ def main() -> None:
         print(f"OutputJSON: {to_project_relative_text(output_parameter_path)}")
         return
 
+    # Write both outputs: the JSON parameter record that other scripts read, and the compact XML
+    # that ddsim loads directly to build the detector geometry.
     indent_xml(root_element)
     with output_parameter_path.open("w", encoding="utf-8") as output_json_file:
         json.dump(output_parameter_payload, output_json_file, indent=2)

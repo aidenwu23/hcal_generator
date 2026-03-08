@@ -12,18 +12,17 @@ import xml.etree.ElementTree as xml_tree
 from pathlib import Path
 from typing import Dict, List, Optional
 
-PROJECT_DIRECTORY = Path(__file__).resolve().parents[1]
-DEFAULT_TEMPLATE_PATH = "geometries/templates/hcal_template.xml"
+from geometry_utils import (
+    DEFAULT_TEMPLATE_PATH,
+    PROJECT_DIRECTORY,
+    find_target_detector,
+    read_detector_parameters,
+    resolve_project_path,
+    to_project_relative_text,
+    validate_parameter_contract,
+)
+
 DEFAULT_GENERATED_OUTPUT_DIRECTORY = "geometries/generated"
-INVALID_PARAMETER_KEYS = {
-    "t_absorber",
-    "t_scin",
-    "t_tape",
-    "tapeMaterial",
-    "t_spacer_seg1",
-    "t_spacer_seg2",
-    "t_spacer_seg3",
-}
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -32,20 +31,6 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--overwrite", action="store_true", help="Regenerate existing outputs")
     parser.add_argument("--dry-run", action="store_true", help="Print planned geometry rows as JSON")
     return parser.parse_args()
-
-
-def resolve_project_path(path_text: str) -> Path:
-    raw_path = Path(path_text).expanduser()
-    if raw_path.is_absolute():
-        return raw_path.resolve()
-    return (PROJECT_DIRECTORY / raw_path).resolve()
-
-
-def to_project_relative_text(path: Path) -> str:
-    try:
-        return str(path.relative_to(PROJECT_DIRECTORY))
-    except ValueError:
-        return str(path)
 
 
 def load_yaml_object(yaml_path: Path) -> dict:
@@ -77,55 +62,6 @@ def sanitize_tag_text(tag_text: str) -> str:
     return "sweep"
 
 
-def parse_int_value(value_text: str, key_text: str) -> int:
-    try:
-        return int(float(value_text))
-    except ValueError as error:
-        raise ValueError(f"{key_text} must be an integer-like value.") from error
-
-
-def validate_parameter_contract(parameter_values: Dict[str, str]) -> None:
-    invalid_keys = sorted(key_text for key_text in parameter_values if key_text in INVALID_PARAMETER_KEYS)
-    if invalid_keys:
-        joined_keys = ", ".join(invalid_keys)
-        raise ValueError(
-            "Invalid HCAL parameters: "
-            f"{joined_keys}. Use t_spacer, spacerMaterial, "
-            "t_absorber_seg1/2/3, and t_scin_seg1/2/3."
-        )
-
-    required_keys = [
-        "seg1_layers",
-        "seg2_layers",
-        "seg3_layers",
-        "t_spacer",
-        "spacerMaterial",
-        "t_absorber_seg1",
-        "t_absorber_seg2",
-        "t_absorber_seg3",
-        "t_scin_seg1",
-        "t_scin_seg2",
-        "t_scin_seg3",
-    ]
-    missing_keys = [key_text for key_text in required_keys if str(parameter_values.get(key_text, "")).strip() == ""]
-    if missing_keys:
-        joined_keys = ", ".join(missing_keys)
-        raise ValueError(f"Missing required HCAL parameters: {joined_keys}")
-
-    layer_count = parse_int_value(str(parameter_values.get("nLayers", "")), "nLayers")
-    segment_layer_counts = [
-        parse_int_value(str(parameter_values["seg1_layers"]), "seg1_layers"),
-        parse_int_value(str(parameter_values["seg2_layers"]), "seg2_layers"),
-        parse_int_value(str(parameter_values["seg3_layers"]), "seg3_layers"),
-    ]
-    if layer_count <= 0:
-        raise ValueError("nLayers must be positive.")
-    if any(segment_layer_count <= 0 for segment_layer_count in segment_layer_counts):
-        raise ValueError("seg1_layers, seg2_layers, and seg3_layers must all be positive.")
-    if sum(segment_layer_counts) != layer_count:
-        raise ValueError("seg1_layers + seg2_layers + seg3_layers must equal nLayers.")
-
-
 def stringify_geometry_parameters(raw_parameter_map: Dict[str, object]) -> Dict[str, str]:
     geometry_parameters = {
         str(key_text): str(value_object)
@@ -147,46 +83,11 @@ def read_existing_geometry_id(parameter_json_path: Path) -> str:
     return str(geometry_id_value)
 
 
-def find_target_detector(
-    root_element: xml_tree.Element,
-    detector_name: Optional[str],
-    detector_type: Optional[str],
-) -> xml_tree.Element:
-    detectors_element = root_element.find("detectors")
-    if detectors_element is None:
-        raise RuntimeError("Template is missing <detectors> section")
-
-    detector_elements = detectors_element.findall("detector")
-    if not detector_elements:
-        raise RuntimeError("Template has no <detector> entries")
-
-    if detector_name and detector_type:
-        for detector_element in detector_elements:
-            if detector_element.get("name") == detector_name and detector_element.get("type") == detector_type:
-                return detector_element
-
-    if detector_name:
-        for detector_element in detector_elements:
-            if detector_element.get("name") == detector_name:
-                return detector_element
-
-    if detector_type:
-        for detector_element in detector_elements:
-            if detector_element.get("type") == detector_type:
-                return detector_element
-
-    return detector_elements[0]
-
-
-def read_detector_parameters(detector_element: xml_tree.Element) -> Dict[str, str]:
-    parameter_values: Dict[str, str] = {}
-    for parameter_element in detector_element.findall("parameter"):
-        key_text = parameter_element.get("name")
-        value_text = parameter_element.get("value")
-        if key_text is None or value_text is None:
-            continue
-        parameter_values[key_text] = value_text
-    return parameter_values
+def _extract_tagged_value(output: str, prefix: str) -> str:
+    for line in output.splitlines():
+        if line.strip().startswith(prefix):
+            return line.strip().split(":", 1)[1].strip()
+    return ""
 
 
 def build_generate_command(
@@ -220,29 +121,18 @@ def build_generate_command(
 
 
 def inspect_geometry_generation(command: List[str]) -> Dict[str, str]:
-    inspected_command = [*command, "--dry-run"]
     result = subprocess.run(
-        inspected_command,
+        [*command, "--dry-run"],
         cwd=PROJECT_DIRECTORY,
         check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
     )
-
-    geometry_id = ""
-    output_xml_path = ""
-    output_json_path = ""
-    for output_line in result.stdout.splitlines():
-        stripped_line = output_line.strip()
-        if stripped_line.startswith("GeometryID:"):
-            geometry_id = stripped_line.split(":", 1)[1].strip()
-        elif stripped_line.startswith("OutputXML:"):
-            output_xml_path = stripped_line.split(":", 1)[1].strip()
-        elif stripped_line.startswith("OutputJSON:"):
-            output_json_path = stripped_line.split(":", 1)[1].strip()
-
-    if geometry_id == "" or output_xml_path == "" or output_json_path == "":
+    geometry_id = _extract_tagged_value(result.stdout, "GeometryID:")
+    output_xml_path = _extract_tagged_value(result.stdout, "OutputXML:")
+    output_json_path = _extract_tagged_value(result.stdout, "OutputJSON:")
+    if not all([geometry_id, output_xml_path, output_json_path]):
         raise RuntimeError("generate_hcal.py --dry-run did not report expected output paths")
     return {
         "geometry_id": geometry_id,
@@ -260,14 +150,8 @@ def run_geometry_generation(command: List[str]) -> str:
         stderr=subprocess.STDOUT,
         text=True,
     )
-
-    geometry_id = ""
-    for output_line in result.stdout.splitlines():
-        stripped_line = output_line.strip()
-        if stripped_line.startswith("GeometryID:"):
-            geometry_id = stripped_line.split(":", 1)[1].strip()
-
-    if geometry_id == "":
+    geometry_id = _extract_tagged_value(result.stdout, "GeometryID:")
+    if not geometry_id:
         raise RuntimeError("generate_hcal.py did not report GeometryID")
     return geometry_id
 
@@ -281,6 +165,8 @@ def build_variant_parameter_list(specification: dict) -> tuple[List[Dict[str, ob
     if not isinstance(raw_variant_list, list):
         raise ValueError("variants must be a list")
 
+    # Each variant inherits all constant parameters, then its own keys override any that overlap.
+    # This lets the YAML express a shared base geometry with per-variant thickness changes.
     variant_parameter_list: List[Dict[str, object]] = []
     for raw_variant in raw_variant_list:
         if raw_variant is None:
@@ -320,6 +206,8 @@ def build_geometry_rows(specification: dict, sweep_spec_path: Path) -> List[Dict
         else:
             geometry_tag = sanitize_tag_text(str(requested_tag))
 
+        # Read the template defaults for this detector, then merge the variant parameters on top.
+        # Validation runs after the merge so the full set is checked together.
         xml_document = xml_tree.parse(template_path)
         root_element = xml_document.getroot()
         detector_element = find_target_detector(root_element, detector_name, detector_type)
@@ -327,6 +215,9 @@ def build_geometry_rows(specification: dict, sweep_spec_path: Path) -> List[Dict
         geometry_parameters.update(stringify_geometry_parameters(raw_variant_parameters))
         validate_parameter_contract(geometry_parameters)
 
+        # Ask generate_hcal.py what ID and file paths this parameter set would produce,
+        # without actually writing anything to disk yet. This gives us stable paths to record
+        # in the row before the real generation step runs.
         generation_command = build_generate_command(
             template_path=template_path,
             generated_output_directory=generated_output_directory,
@@ -375,11 +266,18 @@ def main() -> None:
             geometry_id = str(geometry_row["geometry_id"])
             output_parameter_path = resolve_project_path(str(geometry_row["json_path"]))
             output_xml_path = resolve_project_path(str(geometry_row["xml_path"]))
+
+            # Skip generation if both output files already exist and the stored ID matches.
+            # If the ID does not match, something on disk is inconsistent and we raise rather
+            # than silently overwriting it.
             if output_parameter_path.exists() and output_xml_path.exists() and not arguments.overwrite:
                 existing_geometry_id = read_existing_geometry_id(output_parameter_path)
                 if existing_geometry_id != geometry_id:
                     raise ValueError(f"Geometry ID mismatch in {output_parameter_path}")
                 continue
+
+            # Run the actual generation and verify the ID that came back matches what the
+            # dry-run predicted, so we catch any parameter-handling divergence early.
             try:
                 generated_geometry_id = run_geometry_generation(list(geometry_row["command"]))
             except subprocess.CalledProcessError as error:
@@ -395,21 +293,7 @@ def main() -> None:
         print(f"Generated {generated_count} geometries for {sweep_spec_path}")
 
     if arguments.dry_run:
-        printable_rows = []
-        for geometry_row in all_geometry_rows:
-            printable_rows.append(
-                {
-                    "spec_path": geometry_row["spec_path"],
-                    "index": geometry_row["index"],
-                    "variant_name": geometry_row["variant_name"],
-                    "tag": geometry_row["tag"],
-                    "geometry_id": geometry_row["geometry_id"],
-                    "geometry_directory": geometry_row["geometry_directory"],
-                    "json_path": geometry_row["json_path"],
-                    "xml_path": geometry_row["xml_path"],
-                    "parameters": geometry_row["parameters"],
-                }
-            )
+        printable_rows = [{k: v for k, v in row.items() if k != "command"} for row in all_geometry_rows]
         print(json.dumps(printable_rows, indent=2))
 
 

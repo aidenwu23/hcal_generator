@@ -126,8 +126,9 @@ def main() -> None:
     # Prepare any optional processor flags that should be threaded through every run.
     extra_process_flags = flatten_process_extras(args.process_extra)
 
-    # Non-muon production needs a muon control sample first so each geometry gets a calibrated
-    # visible-energy threshold for the detection and neutron-response summaries.
+    # For non-muon runs, collect a per-geometry muon calibration threshold before any signal
+    # events are processed. The threshold is used downstream to separate real hadronic deposits
+    # from noise, so it must be ready before the first neutron run starts.
     muon_threshold_by_geometry_id: Dict[str, float] = {}
     gun_particle = args.gun_particle.strip().lower()
     running_muon_sample = gun_particle in ("mu-", "mu+")
@@ -163,10 +164,16 @@ def main() -> None:
             print(f"[skip] {run_plan.run_id} (events already present)")
             continue
 
+        # Save the default muon threshold so it can be restored after this run, regardless of
+        # whether the per-geometry calibration overrides it or the run fails partway through.
         saved_muon_threshold = args.muon_threshold
 
         try:
             neutron_scale = None
+            is_neutron = run_plan.gun_particle.strip().lower() == "neutron"
+
+            # Replace the default threshold with the value derived from the muon control sample
+            # for this specific geometry, so the detection cut reflects its actual noise floor.
             if not running_muon_sample:
                 geometry_id = run_plan.geometry_variant.geometry_id
                 if geometry_id not in muon_threshold_by_geometry_id:
@@ -181,11 +188,11 @@ def main() -> None:
                 run_plan,
                 extra_process_flags,
             )
-            if run_plan.gun_particle.strip().lower() == "neutron":
+            if is_neutron:
                 _, neutron_scale = run_neutron_calibration(args, run_plan)
             run_record.meta_seconds = write_metadata(args, run_plan)
             write_calibration(args, run_plan, neutron_scale)
-            if run_plan.gun_particle.strip().lower() == "neutron":
+            if is_neutron:
                 run_record.performance_seconds = run_performance_analysis(args, run_plan)
             run_record.status = "completed"
         except subprocess.CalledProcessError as exc:
