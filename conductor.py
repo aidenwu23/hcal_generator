@@ -2,7 +2,11 @@
 """conductor.py
 
 Run the HCAL production campaign from geometry sweeps through manifests.
-Example: python3 conductor.py --spec geometries/sweeps/test_run.yaml --overwrite
+Example: 
+python3 conductor.py --spec geometries/sweeps/bhcal.yaml \
+  --events-per-run 2000 \
+  --seed 67 \
+  --overwrite
 """
 
 from __future__ import annotations
@@ -51,7 +55,7 @@ def parse_args() -> argparse.Namespace:
         help="Optional chunk appended to the processor call.",
     )
     parser.add_argument("--gun-particle", default="neutron", help="Primary gun particle (default: neutron).")
-    parser.add_argument("--gun-energy", type=float, nargs="+", default=[10.0], help="Gun energies in GeV (default: 10).")
+    parser.add_argument("--gun-energy", type=float, nargs="+", default=[5.0], help="Gun energies in GeV (default: 5).")
     parser.add_argument("--gun-position", default="0 0 0", help="Gun position string passed to ddsim.")
     parser.add_argument("--gun-direction", default="0 0 -1", help="Gun direction string passed to ddsim.")
     parser.add_argument("--events-per-run", type=int, default=1, help="Number of events per ddsim run.")

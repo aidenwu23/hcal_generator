@@ -193,6 +193,7 @@ def write_metadata(
     payload: Dict[str, Any] = {
         "geometry_id": run_plan.geometry_variant.geometry_id,
         "gun_energy_GeV": run_plan.gun_energy_GeV,
+        "seed": run_plan.seed,
     }
     start = time.time()
 
