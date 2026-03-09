@@ -7,6 +7,7 @@ python visuals/visualize.py --geometry-id 81c3da7d -n 1
 """
 
 import argparse
+import math
 from pathlib import Path
 import subprocess
 
@@ -55,11 +56,50 @@ def parse_args():
         default=None,
         help="Output ROOT file. Defaults to visuals/<geometry_id>_display_with_particles.root.",
     )
+    parser.add_argument(
+        "--charged-only",
+        action="store_true",
+        help="Only draw charged MC particle segments.",
+    )
+    parser.add_argument(
+        "--min-energy",
+        type=float,
+        default=0.0,
+        help="Minimum MC particle kinetic energy in GeV to draw.",
+    )
     return parser.parse_args()
 
 
 def scale_position_for_display(position):
     return [coordinate * 0.1 for coordinate in position]
+
+
+def get_particle_charge(pdg_code):
+    particle = ROOT.TDatabasePDG.Instance().GetParticle(int(pdg_code))
+    if particle:
+        return particle.Charge()
+
+    fallback_charges = {
+        -2212: -3.0,
+        -211: -3.0,
+        -13: -3.0,
+        -11: 3.0,
+        11: -3.0,
+        13: 3.0,
+        211: 3.0,
+        2212: 3.0,
+    }
+    return fallback_charges.get(int(pdg_code), 0.0)
+
+
+def get_kinetic_energy(momentum_x, momentum_y, momentum_z, mass):
+    momentum_squared = (
+        momentum_x * momentum_x
+        + momentum_y * momentum_y
+        + momentum_z * momentum_z
+    )
+    total_energy = math.sqrt(max(0.0, momentum_squared + mass * mass))
+    return total_energy - mass
 
 
 def get_track_color(pdg_code):
@@ -118,19 +158,31 @@ def build_particle_entries(
     endpoint_x,
     endpoint_y,
     endpoint_z,
+    mass_values,
+    momentum_x,
+    momentum_y,
+    momentum_z,
 ):
     # Convert one event of parallel MC arrays into particle segment records.
     particles = []
 
     for index, pdg_code in enumerate(pdg_codes):
+        particle_pdg = int(pdg_code)
         particles.append(
             {
-                "pdg": int(pdg_code),
+                "pdg": particle_pdg,
                 "start": scale_position_for_display(
                     [vertex_x[index], vertex_y[index], vertex_z[index]]
                 ),
                 "end": scale_position_for_display(
                     [endpoint_x[index], endpoint_y[index], endpoint_z[index]]
+                ),
+                "is_charged": get_particle_charge(particle_pdg) != 0.0,
+                "kinetic_energy_GeV": get_kinetic_energy(
+                    momentum_x[index],
+                    momentum_y[index],
+                    momentum_z[index],
+                    mass_values[index],
                 ),
             }
         )
@@ -165,6 +217,18 @@ def load_mc_particles_with_uproot(input_file, num_events):
         endpoint_z = tree["MCParticles.endpoint.z"].array(
             library="np", entry_stop=event_count
         )
+        mass_values = tree["MCParticles.mass"].array(
+            library="np", entry_stop=event_count
+        )
+        momentum_x = tree["MCParticles.momentum.x"].array(
+            library="np", entry_stop=event_count
+        )
+        momentum_y = tree["MCParticles.momentum.y"].array(
+            library="np", entry_stop=event_count
+        )
+        momentum_z = tree["MCParticles.momentum.z"].array(
+            library="np", entry_stop=event_count
+        )
 
     for event_index in range(event_count):
         particles.extend(
@@ -176,6 +240,10 @@ def load_mc_particles_with_uproot(input_file, num_events):
                 endpoint_x[event_index],
                 endpoint_y[event_index],
                 endpoint_z[event_index],
+                mass_values[event_index],
+                momentum_x[event_index],
+                momentum_y[event_index],
+                momentum_z[event_index],
             )
         )
 
@@ -216,6 +284,10 @@ def load_mc_particles_with_root(input_file, num_events):
                     load_leaf_values(tree, "MCParticles.endpoint.x"),
                     load_leaf_values(tree, "MCParticles.endpoint.y"),
                     load_leaf_values(tree, "MCParticles.endpoint.z"),
+                    load_leaf_values(tree, "MCParticles.mass"),
+                    load_leaf_values(tree, "MCParticles.momentum.x"),
+                    load_leaf_values(tree, "MCParticles.momentum.y"),
+                    load_leaf_values(tree, "MCParticles.momentum.z"),
                 )
             )
 
@@ -232,10 +304,17 @@ def load_mc_particles(input_file, num_events):
     return load_mc_particles_with_root(input_file, num_events)
 
 
-def is_visible_particle_segment(particle):
+def passes_filters(particle, charged_only, min_energy_GeV):
     start = particle["start"]
     end = particle["end"]
-    return get_track_length(start, end) > MIN_TRACK_LENGTH
+    if get_track_length(start, end) <= MIN_TRACK_LENGTH:
+        return False
+    if charged_only and not particle["is_charged"]:
+        return False
+    if particle["kinetic_energy_GeV"] < min_energy_GeV:
+        return False
+
+    return True
 
 
 def build_tracks(particles):
@@ -243,9 +322,6 @@ def build_tracks(particles):
     tracks = []
 
     for index, particle in enumerate(particles):
-        if not is_visible_particle_segment(particle):
-            continue
-
         start = particle["start"]
         end = particle["end"]
         track = ROOT.TGeoTrack(index, particle["pdg"])
@@ -263,9 +339,6 @@ def build_polylines(particles):
     polylines = []
 
     for particle in particles:
-        if not is_visible_particle_segment(particle):
-            continue
-
         start = particle["start"]
         end = particle["end"]
         polyline = ROOT.TPolyLine3D(2)
@@ -431,8 +504,13 @@ def main():
 
     build_geometry_root(xml_path, output_path)
     particles = load_mc_particles(raw_run_path, args.num_events)
-    tracks = build_tracks(particles)
-    polylines = build_polylines(particles)
+    filtered_particles = [
+        particle
+        for particle in particles
+        if passes_filters(particle, args.charged_only, args.min_energy)
+    ]
+    tracks = build_tracks(filtered_particles)
+    polylines = build_polylines(filtered_particles)
     write_geometry_with_tracks(output_path, tracks, polylines)
     print(
         f"Wrote {len(polylines)} MC particle lines from {raw_run_path.name} "
