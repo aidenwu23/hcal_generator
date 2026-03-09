@@ -4,10 +4,10 @@
 Example usage:
     python3 bayesian_optimization.py \
         --init-training True \
-        --rounds 5 \
+        --rounds 2 \
         --sweep-template geometries/sweeps/template_sweep.yaml \
         --lhs-sweep geometries/sweeps/sweep000.yaml \
-        --lhs-variants 20 \
+        --lhs-variants 5 \
         --tag-prefix lhs \
         --training-csv csv_data/training.csv \
         --model model/lgbm_surrogate.joblib \
@@ -15,8 +15,8 @@ Example usage:
         --sweep-yaml geometries/sweeps/sweep_bo001.yaml \
         --processed-root hcal_generator/data/processed \
         --pool 20000 \
-        --bo-variants 5 \
-        --seed 0
+        --bo-variants 3 \
+        --seed 10
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ def main():
 
         run_cmd([
             "python3", "conductor.py",
-            "--spec", args.sweep_yaml,
+            "--spec", args.lhs_sweep,
             "--events-per-run", "2000",
             "--seed", args.seed,
             "--overwrite"
@@ -122,6 +122,8 @@ def main():
             "--processed-root", args.processed_root,
             "--out", args.training_csv
         ])
+
+    #make script that will select the best geoometry parameters and performance 
 
 if __name__ == "__main__":
     main()
