@@ -48,7 +48,7 @@ constraints:
 
 scoring:
   mode: "metric"   # metric | tradeoff
-  metric: "eff_lo" # detection_efficiency | eff_lo | eff_hi | energy_resolution
+  metric: "detection_efficiency" # detection_efficiency | eff_lo | eff_hi | energy_resolution
   maximize: true
 
   # Example if you want a tradeoff instead:
