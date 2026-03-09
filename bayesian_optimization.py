@@ -13,7 +13,7 @@ Example usage:
         --model model/lgbm_surrogate.joblib \
         --bo-spec geometries/sweeps/bo_spec.yaml \
         --sweep-yaml geometries/sweeps/sweep_bo001.yaml \
-        --processed-root hcal_generator/data/processed \
+        --processed-root data/processed \
         --pool 20000 \
         --bo-variants 3 \
         --seed 10
@@ -124,6 +124,7 @@ def main():
         ])
 
     #make script that will select the best geoometry parameters and performance 
+    
 
 if __name__ == "__main__":
     main()
