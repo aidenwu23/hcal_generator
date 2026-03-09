@@ -1,0 +1,60 @@
+# hcal_generator/sweeps/bo_spec.yaml
+
+# This block is copied into the output sweep YAML (except variants, which are filled in)
+sweep_base:
+  name: sweep_bo
+  tag_prefix: bo
+  template: geometries/templates/hcal_template.xml
+  detector_type: hcal
+  index_base: 0
+  outdir_generated: geometries/generated
+
+  # Defaults applied to every variant; variants will override only what we set
+  constants:
+    side: -z
+    dx: 100/2*cm
+    dy: 100/2*cm
+    zmin: 0.20*m
+    nLayers: 10
+    t_spacer: 0.1*cm
+    spacerMaterial: Air
+    seg1_layers: 3
+    seg2_layers: 3
+    seg3_layers: 4
+
+# Geometry variables proposed by BO.
+# Geometry-space thickness units here are cm.
+bounds:
+  t_absorber_seg1: {low: 0.2, high: 6.0, type: float}
+  t_absorber_seg2: {low: 0.2, high: 6.0, type: float}
+  t_absorber_seg3: {low: 0.2, high: 6.0, type: float}
+
+  t_scin_seg1: {low: 0.10, high: 1.0, type: float}
+  t_scin_seg2: {low: 0.10, high: 1.0, type: float}
+  t_scin_seg3: {low: 0.10, high: 1.0, type: float}
+
+# Fixed surrogate inputs that are not part of the geometry proposal
+fixed_features:
+  gun_energy_GeV: 5.0
+  seg1_layers: 3
+  seg2_layers: 3
+  seg3_layers: 4
+
+constraints:
+  # Constraints on surrogate outputs
+  predicted:
+    - "energy_resolution <= 0.50"
+    - "eff_lo >= 0.00"
+
+scoring:
+  mode: "metric"   # metric | tradeoff
+  metric: "eff_lo" # detection_efficiency | eff_lo | eff_hi | energy_resolution
+  maximize: true
+
+  # Example if you want a tradeoff instead:
+  # mode: "tradeoff"
+  # expr: "eff_lo - 2.0*energy_resolution"
+  # maximize: true
+
+diversity:
+  min_l2_norm: 0.05
