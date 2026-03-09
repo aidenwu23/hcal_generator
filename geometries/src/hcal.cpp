@@ -359,36 +359,37 @@ static Ref_t factory(Detector& detector, xml_h xml_handle, SensitiveDetector sen
       scintillator_vis,
       spacer_vis);
 
-  // Advance by half-thickness so each slice is placed at its center.
-  double local_z = -half_detector_thickness;
+  // Build the stack from the beam-facing front face toward the back face.
+  const double z_step = place_positive_side ? 1.0 : -1.0;
+  double local_z = place_positive_side ? -half_detector_thickness : half_detector_thickness;
   int layer_index = 0;
   for (const SegmentVolumes& segment_volume : segment_volumes) {
     for (int segment_layer_index = 0;
          segment_layer_index < segment_volume.layer_count;
          ++segment_layer_index, ++layer_index) {
-      local_z += segment_volume.absorber_half_thickness;
+      local_z += z_step * segment_volume.absorber_half_thickness;
       detector_volume.placeVolume(segment_volume.absorber_volume, Position(0, 0, local_z))
           .addPhysVolID("layer", layer_index)
           .addPhysVolID("slice", 0);
-      local_z += segment_volume.absorber_half_thickness;
+      local_z += z_step * segment_volume.absorber_half_thickness;
 
-      local_z += segment_volume.spacer_half_thickness;
+      local_z += z_step * segment_volume.spacer_half_thickness;
       detector_volume.placeVolume(segment_volume.spacer_volume, Position(0, 0, local_z))
           .addPhysVolID("layer", layer_index)
           .addPhysVolID("slice", 1);
-      local_z += segment_volume.spacer_half_thickness;
+      local_z += z_step * segment_volume.spacer_half_thickness;
 
-      local_z += segment_volume.scintillator_half_thickness;
+      local_z += z_step * segment_volume.scintillator_half_thickness;
       detector_volume.placeVolume(segment_volume.scintillator_volume, Position(0, 0, local_z))
           .addPhysVolID("layer", layer_index)
           .addPhysVolID("slice", 2);
-      local_z += segment_volume.scintillator_half_thickness;
+      local_z += z_step * segment_volume.scintillator_half_thickness;
 
-      local_z += segment_volume.spacer_half_thickness;
+      local_z += z_step * segment_volume.spacer_half_thickness;
       detector_volume.placeVolume(segment_volume.spacer_volume, Position(0, 0, local_z))
           .addPhysVolID("layer", layer_index)
           .addPhysVolID("slice", 3);
-      local_z += segment_volume.spacer_half_thickness;
+      local_z += z_step * segment_volume.spacer_half_thickness;
     }
   }
 
