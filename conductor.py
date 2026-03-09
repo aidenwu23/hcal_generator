@@ -3,7 +3,7 @@
 
 Run the HCAL production campaign from geometry sweeps through manifests.
 Example: 
-python3 conductor.py --spec geometries/sweeps/bhcal.yaml \
+python3 conductor.py --spec geometries/sweeps/test_run.yaml \
   --events-per-run 2000 \
   --seed 67 \
   --overwrite
@@ -16,7 +16,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import List
 
 from simulation.helpers.geometry_index import inspect_geometry_rows, load_geometry_variants
 from simulation.helpers.run_plan import RunRecord, build_run_plans
@@ -114,80 +114,82 @@ def main() -> None:
     # Flatten any extra processor flags once before planning runs.
     extra_process_flags = flatten_process_extras(args.process_extra)
 
-    # Load one muon threshold per geometry before non-muon signal runs.
-    muon_threshold_by_geometry_id: Dict[str, float] = {}
     gun_particle = args.gun_particle.strip().lower()
     running_muon_sample = gun_particle in ("mu-", "mu+")
-    if not running_muon_sample:
-        # Reuse the configured default during dry runs.
-        for geometry_variant in geometry_variants:
-            calibration_json_path = run_muon_calibration(args, geometry_variant)
-            if args.dry_run:
-                muon_threshold_by_geometry_id[geometry_variant.geometry_id] = float(args.muon_threshold)
-                continue
-            with calibration_json_path.open("r", encoding="utf-8") as calibration_file:
-                payload = json.load(calibration_file)
-            threshold_value = payload.get("muon_threshold_GeV")
-            if threshold_value is None:
-                raise ValueError(f"muon_threshold_GeV missing in {calibration_json_path}")
-            muon_threshold_by_geometry_id[geometry_variant.geometry_id] = float(threshold_value)
 
-    # Expand the geometry variants into run plans.
-    run_plans = build_run_plans(args, geometry_variants, extra_process_flags)
-    if not run_plans:
+    # Run one geometry at a time so each geometry finishes fully before the next one starts.
+    run_records: List[RunRecord] = []
+    any_run_plans = False
+    for geometry_variant in geometry_variants:
+        geometry_muon_threshold = float(args.muon_threshold)
+
+        # For non-muon campaigns, derive this geometry's threshold before any of its signal runs.
+        if not running_muon_sample:
+            calibration_json_path = run_muon_calibration(args, geometry_variant)
+            if not args.dry_run:
+                with calibration_json_path.open("r", encoding="utf-8") as calibration_file:
+                    payload = json.load(calibration_file)
+                threshold_value = payload.get("muon_threshold_GeV")
+                if threshold_value is None:
+                    raise ValueError(f"muon_threshold_GeV missing in {calibration_json_path}")
+                geometry_muon_threshold = float(threshold_value)
+
+        # Expand only this geometry into run plans so all of its energies and seeds stay together.
+        geometry_run_plans = build_run_plans(args, [geometry_variant], extra_process_flags)
+        if not geometry_run_plans:
+            continue
+        any_run_plans = True
+
+        # Finish every planned run for this geometry before moving to the next geometry.
+        for run_plan in geometry_run_plans:
+            run_record = RunRecord(plan=run_plan, status="pending")
+
+            # Reuse an existing processed run unless overwrite was requested.
+            if not args.overwrite and run_plan.events_path.exists():
+                run_record.status = "skipped_existing"
+                run_records.append(run_record)
+                print(f"[skip] {run_plan.run_id} (events already present)")
+                continue
+
+            saved_muon_threshold = args.muon_threshold
+
+            try:
+                neutron_scale = None
+                is_neutron = run_plan.gun_particle.strip().lower() == "neutron"
+
+                # Use the threshold derived for this geometry on each of its non-muon runs.
+                if not running_muon_sample:
+                    args.muon_threshold = geometry_muon_threshold
+
+                # Run the full chain for this plan from simulation through analysis outputs.
+                run_record.ddsim_seconds = run_ddsim(args, run_plan)
+                run_record.process_seconds, _ = run_process(
+                    args,
+                    run_plan,
+                    extra_process_flags,
+                )
+                if is_neutron:
+                    _, neutron_scale = run_neutron_calibration(args, run_plan)
+                run_record.meta_seconds = write_metadata(args, run_plan)
+                write_calibration(args, run_plan, neutron_scale)
+                if is_neutron:
+                    run_record.performance_seconds = run_performance_analysis(args, run_plan)
+                run_record.status = "completed"
+            except subprocess.CalledProcessError as exc:
+                run_record.status = "failed"
+                run_record.error = f"{exc.cmd} -> exit {exc.returncode}"
+            except Exception as exc:
+                run_record.status = "failed"
+                run_record.error = str(exc)
+            finally:
+                # Restore the caller-level threshold before the next run starts.
+                args.muon_threshold = saved_muon_threshold
+
+            run_records.append(run_record)
+
+    if not any_run_plans:
         print("No run plans generated; adjust seeds/energies.")
         return
-
-    # Run each plan and record its final status for the manifest.
-    run_records: List[RunRecord] = []
-    for run_plan in run_plans:
-        run_record = RunRecord(plan=run_plan, status="pending")
-
-        # Skip runs whose event file already exists unless overwrite was requested.
-        if not args.overwrite and run_plan.events_path.exists():
-            run_record.status = "skipped_existing"
-            run_records.append(run_record)
-            print(f"[skip] {run_plan.run_id} (events already present)")
-            continue
-
-        saved_muon_threshold = args.muon_threshold
-
-        try:
-            neutron_scale = None
-            is_neutron = run_plan.gun_particle.strip().lower() == "neutron"
-
-            # Apply the per-geometry threshold before running non-muon samples.
-            if not running_muon_sample:
-                geometry_id = run_plan.geometry_variant.geometry_id
-                if geometry_id not in muon_threshold_by_geometry_id:
-                    raise RuntimeError(f"Missing muon calibration threshold for geometry {geometry_id}")
-                args.muon_threshold = muon_threshold_by_geometry_id[geometry_id]
-
-            # Run simulation, processing, and any sample-specific analysis products.
-            run_record.ddsim_seconds = run_ddsim(args, run_plan)
-            run_record.process_seconds, _ = run_process(
-                args,
-                run_plan,
-                extra_process_flags,
-            )
-            if is_neutron:
-                _, neutron_scale = run_neutron_calibration(args, run_plan)
-            run_record.meta_seconds = write_metadata(args, run_plan)
-            write_calibration(args, run_plan, neutron_scale)
-            if is_neutron:
-                run_record.performance_seconds = run_performance_analysis(args, run_plan)
-            run_record.status = "completed"
-        except subprocess.CalledProcessError as exc:
-            run_record.status = "failed"
-            run_record.error = f"{exc.cmd} -> exit {exc.returncode}"
-        except Exception as exc:
-            run_record.status = "failed"
-            run_record.error = str(exc)
-        finally:
-            # Restore the caller-level threshold before the next run starts.
-            args.muon_threshold = saved_muon_threshold
-
-        run_records.append(run_record)
 
     # Write the final manifest after all planned runs finish.
     write_run_manifests(run_records, Path(args.manifest_json), Path(args.manifest_csv))
