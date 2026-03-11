@@ -28,7 +28,7 @@ FEATURE_COLUMNS = [
     "t_scin_seg3",
     "t_spacer",
     "gun_energy_GeV",
-    "detect_threshold_GeV",
+    "muon_threshold_GeV",
 ]
 
 AVERAGE_COLUMNS = [

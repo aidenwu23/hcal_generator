@@ -1,5 +1,5 @@
 # aggregator.py
-# Scans hcal_generator/data/processed/<geomID>/<runID> for (meta.json, performance.json),
+# Scans hcal_generator/data/processed/<geomID>/<runID> for (meta.json, calibration.json, performance.json),
 # joins geometry parameters from hcal_generator/geometries/generated/<geomID>/geometry.json,
 # and emits a run-level training table (CSV) in the specified directory.
 #
@@ -8,7 +8,7 @@
 #
 # Output columns: geometry_id, run_id, nLayers, seg1_layers, seg2_layers, seg3_layers,
 #   t_absorber_seg1/2/3, t_scin_seg1/2/3, t_spacer,
-#   gun_energy_GeV, detect_threshold_GeV,
+#   gun_energy_GeV, muon_threshold_GeV,
 #   detection_efficiency, eff_lo, eff_hi, energy_resolution
 """
 python3 surrogate/aggregator.py \
@@ -21,9 +21,10 @@ from pathlib import Path
 import pandas as pd
 
 
-def _extract(meta_p: Path, perf_p: Path, geometry_root: Path) -> dict:
-    # meta.json provides beam and threshold config; performance.json provides computed metrics
+def _extract(meta_p: Path, calibration_p: Path, perf_p: Path, geometry_root: Path) -> dict:
+    # meta.json provides beam config, calibration.json provides threshold, and performance.json provides metrics.
     meta = json.loads(meta_p.read_text())
+    calibration = json.loads(calibration_p.read_text())
     perf = json.loads(perf_p.read_text())
 
     geometry_id = meta.get("geometry_id") or perf.get("geometry_id")
@@ -53,7 +54,7 @@ def _extract(meta_p: Path, perf_p: Path, geometry_root: Path) -> dict:
         "t_spacer":             geom_params.get("t_spacer"),
         # Beam and threshold config
         "gun_energy_GeV":       meta.get("gun_energy_GeV"),
-        "detect_threshold_GeV": meta.get("detect_threshold_GeV"),
+        "muon_threshold_GeV":   calibration.get("muon_threshold_GeV"),
         # Performance metrics
         "detection_efficiency": perf.get("detection_efficiency"),
         "eff_lo":               perf.get("eff_lo"),
@@ -63,13 +64,14 @@ def _extract(meta_p: Path, perf_p: Path, geometry_root: Path) -> dict:
 
 
 def _pairs(processed_root: Path):
-    # Expect: processed/<geomID>/<runID>/meta.json alongside performance.json
+    # Expect: processed/<geomID>/<runID>/meta.json alongside calibration.json and performance.json.
     for meta_path in processed_root.rglob("meta.json"):
         if meta_path.parent.name in {".ipynb_checkpoints", "__pycache__"}:
             continue
+        calibration_path = meta_path.with_name("calibration.json")
         perf_path = meta_path.with_name("performance.json")
-        if perf_path.exists():
-            yield meta_path, perf_path
+        if calibration_path.exists() and perf_path.exists():
+            yield meta_path, calibration_path, perf_path
 
 
 def main():
@@ -84,14 +86,14 @@ def main():
     geometry_root = Path(args.geometry_root) if args.geometry_root else processed_root.parent.parent / "geometries" / "generated"
 
     rows = []
-    for mp, pp in _pairs(processed_root):
+    for mp, cp, pp in _pairs(processed_root):
         try:
-            rows.append(_extract(mp, pp, geometry_root))
+            rows.append(_extract(mp, cp, pp, geometry_root))
         except Exception as e:
             print(f"[WARN] {mp.parent}: {e}")
 
     if not rows:
-        raise SystemExit("No (meta.json, performance.json) pairs found.")
+        raise SystemExit("No (meta.json, calibration.json, performance.json) triples found.")
 
     df = pd.DataFrame(rows)
     
@@ -105,7 +107,7 @@ def main():
         "t_absorber_seg1", "t_absorber_seg2", "t_absorber_seg3",
         "t_scin_seg1", "t_scin_seg2", "t_scin_seg3",
         "t_spacer",
-        "gun_energy_GeV", "detect_threshold_GeV",
+        "gun_energy_GeV", "muon_threshold_GeV",
         "detection_efficiency", "eff_lo", "eff_hi",
         "energy_resolution",
     ]
