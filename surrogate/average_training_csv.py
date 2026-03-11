@@ -2,9 +2,9 @@
 """
 Average a run-level surrogate training CSV into one row per geometry.
 Example:
-python surrogate/average_training_csv.py \
+python3 surrogate/average_training_csv.py \
   --in surrogate/csv_data/training.csv \
-  --out surrogate/csv_data/training_geometry_avg.csv
+  --out surrogate/csv_data/training_avg.csv
 """
 
 from __future__ import annotations
