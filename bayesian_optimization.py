@@ -3,20 +3,21 @@
 """
 Example usage:
     python3 bayesian_optimization.py \
-        --init-training True \
-        --rounds 5 \
+        --init-training False \
+        --rounds 2 \
         --sweep-template geometries/sweeps/template_sweep.yaml \
         --lhs-sweep geometries/sweeps/sweep000.yaml \
-        --lhs-variants 250 \
+        --lhs-variants 150 \
         --tag-prefix lhs \
-        --training-csv csv_data/training.csv \
+        --training-csv csv_data/copy_training.csv \
         --model model/lgbm_surrogate.joblib \
         --bo-spec geometries/sweeps/bo_spec.yaml \
         --sweep-yaml geometries/sweeps/sweep_bo001.yaml \
         --processed-root data/processed \
         --pool 20000 \
-        --bo-variants 5 \
-        --seed 10
+        --bo-variants 2 \
+        --seed 10 \
+        --delete-intermediates 
 """
 
 from __future__ import annotations
@@ -53,6 +54,11 @@ def main():
     ap.add_argument("--pool", type=int, default=20000, help="Number of random/Sobol candidates to sample.")
     ap.add_argument("--bo-variants", type=int, default=5, help="Number of BO variants to output.")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument(
+        "--delete-intermediates",
+        action="store_true",
+        help="Delete intermediate ROOT files after downstream steps finish successfully.",
+    )
     args = ap.parse_args()
 
     #workdir = Path(args.workdir)
@@ -75,7 +81,7 @@ def main():
             "python3", "conductor.py",
             "--spec", args.lhs_sweep,
             "--neutron-events", "2000",
-            "--seed", args.seed,
+            "--seeds", args.seed,
             "--overwrite"
         ])
 
@@ -113,7 +119,7 @@ def main():
             "python3", "conductor.py",
             "--spec", args.sweep_yaml,
             "--neutron-events", "2000",
-            "--seed", str(args.seed + r),
+            "--seeds", str(args.seed + r),
             "--overwrite"
         ])
 
