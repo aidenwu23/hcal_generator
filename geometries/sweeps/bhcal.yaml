@@ -1,5 +1,5 @@
-name: sweep_lhs
-tag_prefix: lhs
+name: bhcal
+tag_prefix: bhcal
 template: geometries/templates/hcal_template.xml
 detector_type: hcal
 index_base: 0
@@ -16,7 +16,7 @@ constants:
   seg2_layers: 3
   seg3_layers: 4
 variants:
-- tag: lhs67
+- tag: bhcal
   t_absorber_seg1: 4
   t_scin_seg1: 0.4
   t_absorber_seg2: 4

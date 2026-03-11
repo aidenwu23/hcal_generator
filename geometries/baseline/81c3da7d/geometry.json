@@ -1,0 +1,21 @@
+{
+  "geometry_id": "81c3da7d",
+  "absorberMaterial": "StainlessSteelSAE304",
+  "activeMaterial": "Polystyrene",
+  "dx": "100/2*cm",
+  "dy": "100/2*cm",
+  "nLayers": 10,
+  "seg1_layers": 3,
+  "seg2_layers": 3,
+  "seg3_layers": 4,
+  "side": "-z",
+  "spacerMaterial": "Air",
+  "t_absorber_seg1": "4*cm",
+  "t_absorber_seg2": "4*cm",
+  "t_absorber_seg3": "4*cm",
+  "t_scin_seg1": "0.4*cm",
+  "t_scin_seg2": "0.4*cm",
+  "t_scin_seg3": "0.4*cm",
+  "t_spacer": "0.1*cm",
+  "zmin": "0.20*m"
+}

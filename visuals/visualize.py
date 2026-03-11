@@ -3,7 +3,7 @@ Build a geometry display for one geometry ID and overlay MC particle segments
 from the first N events of that geometry's first non-muon-control raw run.
 
 Example:
-python3 visuals/visualize.py --geometry-id 81c3da7d -n 1
+python3 visuals/visualize.py --geometry-id 81c3da7d -n 10 --min-energy 0.1
 """
 import argparse
 import math
@@ -325,7 +325,7 @@ def build_tracks(particles):
         end = particle["end"]
         track = ROOT.TGeoTrack(index, particle["pdg"])
         track.SetLineColor(get_track_color(particle["pdg"]))
-        track.SetLineWidth(2)
+        track.SetLineWidth(5)
         track.AddPoint(start[0], start[1], start[2], 0.0)
         track.AddPoint(end[0], end[1], end[2], 1.0)
         tracks.append(track)
@@ -344,7 +344,7 @@ def build_polylines(particles):
         polyline.SetPoint(0, start[0], start[1], start[2])
         polyline.SetPoint(1, end[0], end[1], end[2])
         polyline.SetLineColor(get_track_color(particle["pdg"]))
-        polyline.SetLineWidth(2)
+        polyline.SetLineWidth(5)
         polylines.append(polyline)
 
     return polylines
