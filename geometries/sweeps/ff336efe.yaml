@@ -1,0 +1,25 @@
+name: ff336efe
+tag_prefix: ff336efe
+template: geometries/templates/hcal_template.xml
+detector_type: hcal
+index_base: 0
+outdir_generated: geometries/generated
+constants:
+  side: -z
+  dx: 100/2*cm
+  dy: 100/2*cm
+  zmin: 0.20*m
+  nLayers: 10
+  t_spacer: 0.1*cm
+  spacerMaterial: Air
+  seg1_layers: 3
+  seg2_layers: 3
+  seg3_layers: 4
+variants:
+- tag: ff336efe
+  t_absorber_seg1: 4.1099
+  t_scin_seg1: 4.1789
+  t_absorber_seg2: 4.3507
+  t_scin_seg2: 0.4016
+  t_absorber_seg3: 0.5465
+  t_scin_seg3: 0.4696
