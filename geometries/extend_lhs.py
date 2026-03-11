@@ -45,7 +45,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--min-distance",
         type=float,
-        default=0.0,
+        default=0.15,
         help="Minimum normalized Euclidean distance from existing and newly accepted points.",
     )
     return parser.parse_args()
