@@ -1,0 +1,25 @@
+name: 06529cd5
+tag_prefix: 06529cd5
+template: geometries/templates/hcal_template.xml
+detector_type: hcal
+index_base: 0
+outdir_generated: geometries/generated
+constants:
+  side: -z
+  dx: 100/2*cm
+  dy: 100/2*cm
+  zmin: 0.20*m
+  nLayers: 10
+  t_spacer: 0.1*cm
+  spacerMaterial: Air
+  seg1_layers: 3
+  seg2_layers: 3
+  seg3_layers: 4
+variants:
+- tag: 06529cd5
+  t_absorber_seg1: 3.8869
+  t_scin_seg1: 0.5639
+  t_absorber_seg2: 3.9481
+  t_scin_seg2: 0.4550
+  t_absorber_seg3: 3.9391
+  t_scin_seg3: 0.5613

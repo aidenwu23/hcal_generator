@@ -1,0 +1,10 @@
+{
+  "detected_event_count": 2467,
+  "detection_efficiency": 0.8223333333333334,
+  "eff_hi": 0.0068708229369885965,
+  "eff_lo": 0.007085640220116374,
+  "energy_resolution": 0.40428803605904384,
+  "geometry_id": "06529cd5",
+  "gun_energy_GeV": 5.0,
+  "valid_event_count": 3000
+}

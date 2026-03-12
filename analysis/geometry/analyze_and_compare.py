@@ -7,12 +7,8 @@ python analysis/geometry/analyze_and_compare.py \
   --candidate data/raw/<cand_geometry>/<cand_run>.edm4hep.root
 
 python analysis/geometry/analyze_and_compare.py \
-  --reference data/raw/81c3da7d/rune3896ec0d8.edm4hep.root \
-  --candidate data/raw/3a2e74e3/runfc6edabae2.edm4hep.root
-
-python analysis/geometry/analyze_and_compare.py \
-  --reference data/raw/81c3da7d/rune3896ec0d8.edm4hep.root \
-  --candidate data/raw/e5333e82/run7bbd931745.edm4hep.root
+  --reference data/raw/81c3da7d/run19734f434f.edm4hep.root \
+  --candidate data/raw/06529cd5/runb78e64f42d.edm4hep.root
 """
 
 from __future__ import annotations
