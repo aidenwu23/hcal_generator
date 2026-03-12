@@ -3,13 +3,12 @@
 """
 Example usage:
     python3 bayesian_optimization.py \
-        --init-training False \
         --rounds 2 \
         --sweep-template geometries/sweeps/template_sweep.yaml \
         --lhs-sweep geometries/sweeps/sweep000.yaml \
         --lhs-variants 150 \
         --tag-prefix lhs \
-        --training-csv csv_data/copy_training.csv \
+        --training-csv csv_data/cp_training_avg.csv \
         --model model/lgbm_surrogate.joblib \
         --bo-spec geometries/sweeps/bo_spec.yaml \
         --sweep-yaml geometries/sweeps/sweep_bo001.yaml \
@@ -39,13 +38,13 @@ def run_cmd(cmd):
 
 def main():
     ap = argparse.ArgumentParser(description="Run iterative surrogate-guided optimization loop.")
-    ap.add_argument("--init-training", type=bool, default=False, help="Whether to perform initial training")
+    ap.add_argument("--init-training", action="store_true", help="Whether to perform initial training")
     ap.add_argument("--rounds", type=int, default=5, help="Number of BO rounds to run")
     ap.add_argument("--sweep-template", required=True, help="Template sweep YAML path")
     ap.add_argument("--lhs-sweep", required=True, help="Output sweep YAML path")
     ap.add_argument("--lhs-variants", type=int, required=True, help="Number of LHS variants")
     ap.add_argument("--tag-prefix", default="lhs", help="Variant tag prefix")
-    ap.add_argument("--training-csv", required=True, default="csv_data/training.csv", help="Master CSV of all evaluated designs")
+    ap.add_argument("--training-csv", required=True, default="csv_data/cp_training_avg.csv", help="Master CSV of all evaluated designs")
     ap.add_argument("--model", required=True, help="Path to write surrogate model .joblib")
     ap.add_argument("--bo-spec", help="Path to bo_spec.yaml", default="geometries/sweeps/bo_spec.yaml")
     ap.add_argument("--sweep-yaml", help="Path to sweep.yaml", default="geometries/sweeps/sweep_bo001.yaml")
@@ -82,6 +81,7 @@ def main():
             "--spec", args.lhs_sweep,
             "--neutron-events", "2000",
             "--seeds", args.seed,
+            "--delete-intermediates",
             "--overwrite"
         ])
 
@@ -120,6 +120,7 @@ def main():
             "--spec", args.sweep_yaml,
             "--neutron-events", "2000",
             "--seeds", str(args.seed + r),
+            "--delete-intermediates",
             "--overwrite"
         ])
 
