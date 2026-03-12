@@ -9,6 +9,12 @@ python3 conductor.py --spec geometries/sweeps/extension_1.yaml \
   --delete-intermediates \
   --seeds 67 68 69
 
+python3 conductor.py --spec geometries/sweeps/06529cd5.yaml \
+  --muon-events 10000 \
+  --neutron-events 3000 \
+  --delete-intermediates \
+  --seeds 67 68 69
+
 python3 conductor.py --spec geometries/sweeps/bhcal.yaml \
   --muon-events 10000 \
   --neutron-events 3000 \
