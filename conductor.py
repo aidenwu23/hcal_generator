@@ -12,14 +12,12 @@ python3 conductor.py --spec geometries/sweeps/extension_1.yaml \
 python3 conductor.py --spec geometries/sweeps/best_geo.yaml \
   --muon-events 10000 \
   --neutron-events 3000 \
-  --delete-intermediates \
-  --seeds 1234567
+  --seeds 67
 
 python3 conductor.py --spec geometries/sweeps/bhcal.yaml \
   --muon-events 10000 \
   --neutron-events 3000 \
-  --delete-intermediates \
-  --seeds 1234567
+  --seeds 67
 """
 
 from __future__ import annotations
