@@ -18,8 +18,8 @@ constants:
 variants:
 - tag: ff336efe
   t_absorber_seg1: 4.1099
-  t_scin_seg1: 4.1789
-  t_absorber_seg2: 4.3507
-  t_scin_seg2: 0.4016
-  t_absorber_seg3: 0.5465
+  t_scin_seg1: 0.4016
+  t_absorber_seg2: 4.1789
+  t_scin_seg2: 0.5465
+  t_absorber_seg3: 4.3507
   t_scin_seg3: 0.4696
