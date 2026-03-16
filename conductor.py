@@ -8,7 +8,7 @@ python3 conductor.py --spec geometries/sweeps/best_geo.yaml \
   --neutron-events 3000 \
   --seeds 67
 
-python3 conductor.py --spec geometries/sweeps/control.yaml \
+python3 conductor.py --spec geometries/sweeps/control_min_max.yaml \
   --muon-events 10000 \
   --neutron-events 3000 \
   --seeds 67

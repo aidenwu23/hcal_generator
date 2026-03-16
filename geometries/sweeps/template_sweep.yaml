@@ -12,7 +12,7 @@ constants:
   dy: "100/2*cm"
   zmin: "0.20*m"
   nLayers: 10
-  t_spacer: "0.1*cm"
+  t_spacer: "0.05*cm"
   spacerMaterial: "Air"
   seg1_layers: 3
   seg2_layers: 3
