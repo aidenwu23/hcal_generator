@@ -55,7 +55,8 @@ FEATURE_COLUMNS = [
 ]
 
 TARGET_COLUMNS = [
-    "detection_efficiency",
+    "neutron_efficiency",
+    "kaon0L_efficiency",
     "energy_resolution",
 ]
 
@@ -169,11 +170,6 @@ def main():
     
     # FIXME: Normalize to make mean weight ~1
     #w = w / np.mean(w)
-
-
-    
-    
-
 
     # -------------------------
     # Train / validation split (X, y)

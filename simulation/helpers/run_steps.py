@@ -59,10 +59,8 @@ def flatten_process_extras(chunks: Sequence[Optional[str]]) -> List[str]:
     return flags
 
 
-# Materialize the generated geometry set unless conductor was told to reuse what is already on disk.
+# Materialize the generated geometry set before conductor builds run plans from it.
 def maybe_run_sweeps(args: argparse.Namespace, spec_paths: List[Path]) -> None:
-    if args.skip_sweep:
-        return
     sweep_script = GEOMETRY_DIRECTORY / "sweep_geometries.py"
     if not sweep_script.exists():
         raise FileNotFoundError(f"{sweep_script} not found.")

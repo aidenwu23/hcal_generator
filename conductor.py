@@ -54,7 +54,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser = argparse.ArgumentParser(description="Orchestrate HCAL production runs.")
     parser.add_argument("--spec", "-s", nargs="+", required=True, help="Sweep spec(s) to materialise (YAML).")
-    parser.add_argument("--skip-sweep", action="store_true", help="Assume geometries already generated; skip sweep_geometries.py.")
     parser.add_argument("--overwrite-geos", action="store_true", help="Pass --overwrite to sweep_geometries.py.")
     parser.add_argument("--ddsim", default="ddsim", help="Path to ddsim executable (default: ddsim on PATH).")
     parser.add_argument("--root-bin", default="root", help="Path to ROOT executable.")
@@ -91,11 +90,6 @@ def parse_args() -> argparse.Namespace:
         help="Number of muon-control events used for threshold calibration.",
     )
     parser.add_argument("--seeds", type=int, nargs="+", help="Random seeds for ddsim. Omit to let ddsim pick its own.")
-    parser.add_argument(
-        "--expected-pdg",
-        type=int,
-        help="Override the expected MC PDG code; defaults to gun particle lookup when available.",
-    )
     parser.add_argument(
         "--muon-threshold",
         type=float,
@@ -149,7 +143,7 @@ def main() -> None:
 
     # Load the geometry variants.
     geometry_rows = inspect_geometry_rows(args.python, spec_paths)
-    require_geometry_files = args.skip_sweep or not args.dry_run
+    require_geometry_files = not args.dry_run
     geometry_variants = load_geometry_variants(
         geometry_rows,
         require_geometry_files=require_geometry_files,

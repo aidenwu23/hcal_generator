@@ -9,11 +9,11 @@
 # Output columns: geometry_id, run_id, gun_particle, nLayers, seg1_layers, seg2_layers, seg3_layers,
 #   t_absorber_seg1/2/3, t_scin_seg1/2/3, t_spacer,
 #   gun_energy_GeV, muon_threshold_GeV,
-#   detection_efficiency, eff_lo, eff_hi, energy_resolution
+#   detection_efficiency, energy_resolution
 """
 python3 surrogate/aggregator.py \
   --processed-root data/processed \
-  --out surrogate/csv_data/extra.csv
+  --out surrogate/csv_data/training.csv
 """
 
 import argparse, json
@@ -58,8 +58,6 @@ def _extract(meta_p: Path, calibration_p: Path, perf_p: Path, geometry_root: Pat
         "muon_threshold_GeV":   calibration.get("muon_threshold_GeV"),
         # Performance metrics
         "detection_efficiency": perf.get("detection_efficiency"),
-        "eff_lo":               perf.get("eff_lo"),
-        "eff_hi":               perf.get("eff_hi"),
         "energy_resolution":    perf.get("energy_resolution"),
     }
 
@@ -109,7 +107,7 @@ def main():
         "t_scin_seg1", "t_scin_seg2", "t_scin_seg3",
         "t_spacer",
         "gun_energy_GeV", "muon_threshold_GeV",
-        "detection_efficiency", "eff_lo", "eff_hi",
+        "detection_efficiency",
         "energy_resolution",
     ]
     cols = [c for c in preferred if c in df.columns] + [c for c in df.columns if c not in preferred]

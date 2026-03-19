@@ -153,7 +153,7 @@ def build_run_plans(
 
         # Sweep over every requested particle
         for particle in requested_particles:
-            expected_pdg = args.expected_pdg if args.expected_pdg is not None else lookup_pdg(particle)
+            expected_pdg = lookup_pdg(particle)
             rest_mass_gev = None
             if use_kinetic_energy:
                 rest_mass_gev = lookup_rest_mass_gev(particle)
