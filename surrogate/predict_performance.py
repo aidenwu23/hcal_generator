@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Predict performance metrics for the geometries listed in a sweep YAML.
+Load a trained surrogate, predict metrics for a sweep YAML, and write a CSV.
 Example:
 python3 surrogate/predict_performance.py \
   --model surrogate/model/lgbm_surrogate_NK_0-1.joblib \
@@ -40,6 +40,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_model_bundle(model_path: Path) -> tuple[Any, list[str], list[str]]:
+    # Load the saved model bundle and recover the feature and target schema.
     loaded_payload = joblib.load(model_path)
     if isinstance(loaded_payload, dict) and "model" in loaded_payload:
         model = loaded_payload["model"]
@@ -70,6 +71,7 @@ def load_yaml_object(yaml_path: Path) -> dict[str, Any]:
 
 
 def build_geometry_rows(specification: dict[str, Any]) -> list[dict[str, Any]]:
+    # Merge sweep constants into each variant and validate the geometry fields.
     constants = specification.get("constants", {}) or {}
     if not isinstance(constants, dict):
         raise ValueError("Sweep YAML constants must be a mapping.")
@@ -125,6 +127,7 @@ def main() -> None:
         fixed_features={},
     )
 
+    # Predict feature columns.
     Xs_df = pd.DataFrame(Xs, columns=feature_columns)
     Y = np.asarray(model.predict(Xs_df))
     if Y.ndim != 2 or Y.shape[1] != len(target_columns):

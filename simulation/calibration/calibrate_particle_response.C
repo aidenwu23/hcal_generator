@@ -83,7 +83,7 @@ void calibrate_particle_response(const char* events_path_cstr,
       continue;
     }
 
-    // The muon-calibrated detect threshold defines which signal events count as detected.
+    // The detection threshold (muon calibrated/manual input) defines which signal events count as detected.
     const double visible_energy_GeV = static_cast<double>(visible_E);
     if (visible_energy_GeV < muon_threshold_GeV) {
       continue;
