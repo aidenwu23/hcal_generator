@@ -4,12 +4,12 @@ Generate geometries from a sweep spec, run simulation and analysis, and write
 processed performance results for orchestrator.py.
 
 Example: 
-python3 conductor.py --spec geometries/sweeps/best_geo.yaml \
+python3 conductor.py --spec geometries/sweeps/runs/results.yaml \
   --muon-threshold 0.02 \
   --events 3000 \
   --gun-particle neutron kaon0L \
   --gun-kinetic-energy 1 \
-  --seeds 67 --delete-intermediates
+  --seeds 10000 10001 10002 10003 10004 10005 10006 10007 10008 10009 --delete-intermediates
 
 python3 conductor.py --spec geometries/sweeps/proposed/proposed_1.yaml \
   --muon-threshold 0.02 \

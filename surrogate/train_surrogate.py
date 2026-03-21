@@ -14,13 +14,13 @@ Targets:
 Usage: 
 
 python ./surrogate/train_surrogate.py \
-  --training-csv ./csv_data/training_avg.csv \
-  --output-model ./model/lgbm_surrogate.joblib
+  --training-csv ./surrogate/csv_data/training_compact/training_NK_compact_0.csv \
+  --output-model ./surrogate/model/lgbm_surrogate_NK_0.joblib
 
 python ./surrogate/train_surrogate.py \
-  --training-csv ./csv_data/training_avg.csv \
-  --load-model ./model/lgbm_surrogate.joblib \
-  --output-model ./model/lgbm_surrogate_updated.joblib
+  --training-csv ./surrogate/csv_data/merged/training_NK_compact_0-2.csv \
+  --load-model ./surrogate/model/lgbm_surrogate_NK_0.joblib \
+  --output-model ./surrogate/model/lgbm_surrogate_NK_0-2.joblib
 
 
 """

@@ -1,19 +1,23 @@
-# aggregator.py
+# build_raw_csv.py
 # Scans hcal_optimizer/data/processed/<geomID>/<runID> for (meta.json, calibration.json, performance.json),
 # joins geometry parameters from hcal_optimizer/geometries/generated/<geomID>/geometry.json,
 # and emits a run-level training table (CSV) in the specified directory.
 #
 # Usage:
-#   python3 surrogate/aggregator.py --processed-root data/processed --out csv_data/training.csv
+#   python3 surrogate/build_raw_csv.py --processed-root data/processed --out surrogate/csv_data/training_raw/training_NK_raw_2.csv
 #
 # Output columns: geometry_id, run_id, gun_particle, nLayers, seg1_layers, seg2_layers, seg3_layers,
 #   t_absorber_seg1/2/3, t_scin_seg1/2/3, t_spacer,
 #   gun_energy_GeV, muon_threshold_GeV,
 #   detection_efficiency, energy_resolution
 """
-python3 surrogate/aggregator.py \
+python3 surrogate/build_raw_csv.py \
   --processed-root data/processed \
-  --out surrogate/csv_data/training_NK_2.csv
+  --out surrogate/csv_data/training_raw/training_NK_raw_2.csv
+
+python3 surrogate/build_raw_csv.py \
+  --processed-root data/processed \
+  --out csv_data/results_raw.csv
 """
 
 import argparse, json

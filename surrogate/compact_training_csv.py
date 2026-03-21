@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """
-Average a run-level surrogate training CSV into one row per geometry.
+Compact a run-level surrogate training CSV into one row per geometry.
 Example:
-python3 surrogate/average_training_csv.py \
-  --in surrogate/csv_data/training_NK_2.csv \
-  --out surrogate/csv_data/training_NK_avg_2.csv
+python3 surrogate/compact_training_csv.py \
+  --in surrogate/csv_data/training_raw/training_NK_raw_2.csv \
+  --out surrogate/csv_data/training_compact/training_NK_compact_2.csv
+
+python3 surrogate/compact_training_csv.py \
+  --in csv_data/results_raw.csv \
+  --out csv_data/results_compact.csv
 """
 
 from __future__ import annotations
@@ -32,7 +36,7 @@ GEOMETRY_FEATURES = [
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Average a run-level surrogate training CSV into one geometry-level row."
+        description="Compact a run-level surrogate training CSV into one geometry-level row."
     )
     parser.add_argument(
         "--in",
@@ -43,7 +47,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--out",
         required=True,
-        help="Output geometry-level averaged CSV path.",
+        help="Output geometry-level compact CSV path.",
     )
     return parser.parse_args()
 

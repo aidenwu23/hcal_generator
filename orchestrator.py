@@ -6,18 +6,18 @@ propose the next geometry batch for conductor.py.
 
 Example:
 python3 orchestrator.py \
-  --training-csv surrogate/csv_data/training_NK_avg_0-2.csv \
-  --run-level-csv surrogate/csv_data/training_NK_0-2.csv \
-  --model surrogate/model/lgbm_surrogate_NK_0-2.joblib \
+  --training-csv surrogate/csv_data/merged/training_NK_compact_0-1.csv \
+  --run-level-csv surrogate/csv_data/merged/training_NK_raw_0-1.csv \
+  --model surrogate/model/lgbm_surrogate_NK_0-1.joblib \
   --bo-spec geometries/sweeps/bo_spec.yaml \
-  --sweep-yaml geometries/sweeps/proposed/proposed_2.yaml \
+  --sweep-yaml geometries/sweeps/proposed/validation_test_0-1.yaml \
   --pool 20000 \
   --bo-variants 5 \
   --seed 10 \
   --processed-root data/processed \
   --overwrite
 
-Don't use overwrite if you already have training csv file.
+Don't use overwrite if you already have the training CSV you want to reuse.
 """
 
 from __future__ import annotations
@@ -52,12 +52,12 @@ def refresh_geometry_training_csv(
     geometry_training_csv: Path,
 ) -> None:
     run_cmd([
-        "python3", "surrogate/aggregator.py",
+        "python3", "surrogate/build_raw_csv.py",
         "--processed-root", str(processed_root),
         "--out", str(run_level_csv),
     ])
     run_cmd([
-        "python3", "surrogate/average_training_csv.py",
+        "python3", "surrogate/compact_training_csv.py",
         "--in", str(run_level_csv),
         "--out", str(geometry_training_csv),
     ])
@@ -138,7 +138,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--best-observed-csv",
-        default="csv_data/best_geometry_configuration.csv",
+        default="surrogate/csv_data/merged/best_geometry_configuration.csv",
         help="Path to the best-observed geometry summary CSV.",
     )
     return parser.parse_args()
@@ -171,7 +171,7 @@ def main() -> None:
     if args.overwrite or not geometry_training_csv.exists():
         if not args.overwrite and run_level_csv.exists():
             run_cmd([
-                "python3", "surrogate/average_training_csv.py",
+                "python3", "surrogate/compact_training_csv.py",
                 "--in", str(run_level_csv),
                 "--out", str(geometry_training_csv),
             ])

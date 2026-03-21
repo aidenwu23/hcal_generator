@@ -1,0 +1,53 @@
+name: sweep_bo
+tag_prefix: bo
+template: geometries/templates/hcal_template.xml
+detector_type: hcal
+index_base: 0
+outdir_generated: geometries/generated
+constants:
+  side: -z
+  dx: 100/2*cm
+  dy: 100/2*cm
+  zmin: 0.20*m
+  nLayers: 10
+  t_spacer: 0.05*cm
+  spacerMaterial: Air
+  seg1_layers: 3
+  seg2_layers: 3
+  seg3_layers: 4
+variants:
+- tag: bo000
+  t_absorber_seg1: 3.5462
+  t_absorber_seg2: 3.7294
+  t_absorber_seg3: 3.7378
+  t_scin_seg1: 0.593
+  t_scin_seg2: 0.5514
+  t_scin_seg3: 0.587
+- tag: bo001
+  t_absorber_seg1: 3.6514
+  t_absorber_seg2: 3.612
+  t_absorber_seg3: 3.7089
+  t_scin_seg1: 0.5678
+  t_scin_seg2: 0.5435
+  t_scin_seg3: 0.5618
+- tag: bo002
+  t_absorber_seg1: 3.6841
+  t_absorber_seg2: 3.7804
+  t_absorber_seg3: 3.7255
+  t_scin_seg1: 0.5796
+  t_scin_seg2: 0.5689
+  t_scin_seg3: 0.5891
+- tag: bo003
+  t_absorber_seg1: 3.6581
+  t_absorber_seg2: 3.7026
+  t_absorber_seg3: 3.5687
+  t_scin_seg1: 0.5514
+  t_scin_seg2: 0.5393
+  t_scin_seg3: 0.5745
+- tag: bo004
+  t_absorber_seg1: 3.5788
+  t_absorber_seg2: 3.7879
+  t_absorber_seg3: 3.7917
+  t_scin_seg1: 0.5978
+  t_scin_seg2: 0.5476
+  t_scin_seg3: 0.5949
