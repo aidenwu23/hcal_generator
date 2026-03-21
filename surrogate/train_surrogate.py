@@ -206,9 +206,9 @@ def main():
 
     print("\nValidation summary (mean absolute percentage error):")
     for col in target_columns:
-        mape_normalized = mean_absolute_percentage_error(val_pred[col], y_val[col].values)
+        mape_normalized = mean_absolute_percentage_error(y_val[col].values, val_pred[col])
         mape_percentage = mape_normalized * 100
-        print(f"  {col:20s}: MAE = {mape_percentage:.2f}")
+        print(f"  {col:20s}: MAPE = {mape_percentage:.2f}")
 
     # -------------------------
     # Save trained model
