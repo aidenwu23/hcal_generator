@@ -1,4 +1,0 @@
-geometry_id,kinetic_energy_GeV,nLayers,seg1_layers,seg2_layers,seg3_layers,t_absorber_seg1,t_absorber_seg2,t_absorber_seg3,t_scin_seg1,t_scin_seg2,t_scin_seg3,t_spacer,kaon0L_efficiency,kaon0L_efficiency_std,kaon0L_energy_resolution,kaon0L_energy_resolution_std,neutron_efficiency,neutron_efficiency_std,neutron_energy_resolution,neutron_energy_resolution_std,aggregated_objective
-ab14479f,1.0,10,3,3,4,3.5463,4.4744,3.6427,0.5832,0.5726,0.5282,0.05,0.442,,0.4200964222410563,,0.2586666666666666,,0.4489644184849097,,0.8955533333333332
-ab14479f,2.0,10,3,3,4,3.5463,4.4744,3.6427,0.5832,0.5726,0.5282,0.05,0.7373333333333333,,0.4189173883596234,,0.635,,0.4298749041389162,,0.8955533333333332
-ab14479f,3.0,10,3,3,4,3.5463,4.4744,3.6427,0.5832,0.5726,0.5282,0.05,0.811,,0.3959812781583251,,0.7886666666666666,,0.4207488013832365,,0.8955533333333332

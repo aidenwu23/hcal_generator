@@ -48,3 +48,5 @@ data/geometry_analysis/
 
 *.root
 *.joblib
+
+*.csv

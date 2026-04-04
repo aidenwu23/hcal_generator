@@ -14,13 +14,13 @@ Targets:
 Usage: 
 
 python ./surrogate/train_surrogate.py \
-  --training-csv ./surrogate/csv_data/training_compact/training_NK_compact_0.csv \
-  --output-model ./surrogate/model/lgbm_surrogate_NK_0.joblib
+  --training-csv ./surrogate/iterations/1-3_GeV/iteration_0/training_compact_0.csv \
+  --output-model ./surrogate/model/1-3_GeV/lgbm_surrogate_0.joblib
 
 python ./surrogate/train_surrogate.py \
-  --training-csv ./surrogate/csv_data/merged/training_NK_compact_0-2.csv \
-  --load-model ./surrogate/model/lgbm_surrogate_NK_0.joblib \
-  --output-model ./surrogate/model/lgbm_surrogate_NK_0-2.joblib
+  --training-csv ./surrogate/iterations/1-3_GeV/iteration_2/training_compact_0-2.csv \
+  --load-model ./surrogate/model/1-3_GeV/lgbm_surrogate_0.joblib \
+  --output-model ./surrogate/model/1-3_GeV/lgbm_surrogate_0-2.joblib
 
 
 """
@@ -205,11 +205,11 @@ def main():
     val_pred = model.predict(X_val)
     val_pred = pd.DataFrame(val_pred, columns=target_columns)
 
-    print("\nValidation summary (mean absolute percentage error):")
+    print("\nSummary (Mean Absolute Percentage Error):")
     for col in target_columns:
         mape_normalized = mean_absolute_percentage_error(y_val[col].values, val_pred[col])
         mape_percentage = mape_normalized * 100
-        print(f"  {col:20s}: MAPE = {mape_percentage:.2f}")
+        print(f"  {col:20s}: {mape_percentage:.2f}")
 
     # -------------------------
     # Save trained model

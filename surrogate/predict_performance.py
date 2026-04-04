@@ -3,10 +3,10 @@
 Load a trained surrogate, predict metrics for a sweep YAML, and write a CSV.
 Example:
 python3 surrogate/predict_performance.py \
-  --model surrogate/model/lgbm_surrogate_NK_0-1.joblib \
-  --in-yaml geometries/sweeps/proposed/proposed_1.yaml \
+  --model surrogate/model/1_GeV/lgbm_surrogate_0-1.joblib \
+  --in-yaml geometries/sweeps/proposed/1_GeV/proposed_1.yaml \
   --kinetic-energy 1 \
-  --out surrogate/csv_data/predictions/proposed_1_predictions.csv \
+  --out surrogate/iterations/1_GeV/predictions/proposed_1_predictions.csv \
   --objective-expr "neutron_efficiency + kaon0L_efficiency"
 """
 

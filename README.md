@@ -1,6 +1,40 @@
 # hcal_optimizer
 
-Geometry optimizer for a segmented backward-facing hadronic calorimeter (HCal). Uses Geant4 simulations via DD4hep/ddsim to evaluate candidate geometries, trains a LightGBM surrogate on the observed results, and uses Bayesian optimization to propose improved geometry candidates. The objective is to maximize combined neutron and kaon0L detection efficiency subject to energy resolution constraints.
+Geometry optimizer for a generic layered calorimeter (HCal). Uses Geant4 simulations via DD4hep/ddsim to evaluate candidate geometries, trains a LightGBM surrogate on the observed results, and uses Bayesian optimization to propose improved geometry candidates. The objective is to maximize combined neutron and kaon0L detection efficiency subject to energy resolution constraints.
+
+## Current results:
+### Geometry IDs and identification
+Each geometry has 10 total layers divided into 3 segments, with 3/3/4 layers in the front/middle/back segments.
+
+Best geometry converging after 3 iterations from 1 GeV evaluated at 1-3 GeV: c2bbd5d3
+Best geometry converging after 2 iterations from 1-3 GeV evaluated at 1-3 GeV: 57fc2ba4
+Baseline uniform nHCal evaluated at 1-3 GeV: 04e3fdfb
+
+Results are computed using average across 3000 events * 3 different seeds
+
+### Three geometries and their thicknesses (cm)
+```
+         |Abs 1 |Scint 1|Abs 2 |Scint 2|Abs 3 |Scint 3|
+04e3fdfb:|4.0   |0.4    |4.0   |0.4    |4.0   |0.4    |
+c2bbd5d3:|3.5462|0.593  |3.7294|0.5514 |3.7378|0.587  |
+57fc2ba4:|3.5503|0.5843 |3.53  |0.5762 |4.0639|0.59   |
+```
+
+### Geometry neutron efficiency across 1-3 GeV (max = 1)
+```
+         |1 GeV |2 GeV  |3 GeV |
+04e3fdfb:|0.1043|0.4084 |0.6598|
+c2bbd5d3:|0.2846|0.6544 |0.7798|
+57fc2ba4:|0.2899|0.6484 |0.7946|
+```
+
+### Geometry kaon0L efficiency across 1-3 GeV
+```
+         |1 GeV |2 GeV  |3 GeV |
+04e3fdfb:|0.2259|0.5618 |0.7483|
+c2bbd5d3:|0.4878|0.7448 |0.8081|
+57fc2ba4:|0.4857|0.7466 |0.8088|
+```
 
 ## Notes and Assumptions
 
@@ -55,13 +89,6 @@ python3 orchestrator.py --help
 ```
 
 Repeat steps 2–3, merging training CSVs across iterations, until the optimum converges.
-
-# Iteration naming
-
-- `training_0` is the initial observed dataset (Latin Hypercube Sampling).
-- `proposed_0` is the first surrogate-proposed batch generated from `training_0`.
-- `training_N` comes from actual Geant4 results produced by running `proposed_(N-1)`.
-- `proposed_N` is generated after retraining on the observed data available through `training_N`.
 
 ## Geometry parameterization
 

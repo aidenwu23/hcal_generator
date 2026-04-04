@@ -6,11 +6,11 @@ propose the next geometry batch for conductor.py.
 
 Example:
 python3 orchestrator.py \
-  --training-csv surrogate/csv_data/merged/training_NK_compact_0-1.csv \
-  --run-level-csv surrogate/csv_data/merged/training_NK_raw_0-1.csv \
-  --model surrogate/model/lgbm_surrogate_NK_0-1.joblib \
-  --bo-spec geometries/sweeps/bo_spec.yaml \
-  --sweep-yaml geometries/sweeps/proposed/validation_test_0-1.yaml \
+  --training-csv surrogate/iterations/1-3_GeV/iteration_1/training_compact_0-1.csv \
+  --run-level-csv surrogate/iterations/1-3_GeV/iteration_1/training_raw_0-1.csv \
+  --model surrogate/model/1-3_GeV/lgbm_surrogate_0-1.joblib \
+  --bo-spec geometries/sweeps/bo_spec_1-3_GeV.yaml \
+  --sweep-yaml geometries/sweeps/proposed/1-3_GeV/proposed_1.yaml \
   --pool 20000 \
   --bo-variants 5 \
   --seed 10 \
@@ -197,7 +197,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--best-observed-csv",
-        default="surrogate/csv_data/merged/best_geometry_configuration.csv",
+        default="csv_data/best_geos/best_observed_geo.csv",
         help="Path to the best-observed geometry summary CSV.",
     )
     return parser.parse_args()

@@ -3,12 +3,12 @@
 Compact a run-level surrogate training CSV into one row per geometry and kinetic energy.
 Example:
 python3 surrogate/compact_training_csv.py \
-  --in surrogate/csv_data/training_raw/training_NK_raw_0.csv \
-  --out surrogate/csv_data/training_compact/training_NK_compact_0.csv
+  --in surrogate/iterations/1-3_GeV/iteration_2/training_raw_0-2.csv \
+  --out surrogate/iterations/1-3_GeV/iteration_2/training_compact_0-2.csv
 
 python3 surrogate/compact_training_csv.py \
-  --in csv_data/results_raw.csv \
-  --out csv_data/results_compact.csv
+  --in csv_data/data.csv \
+  --out csv_data/data_compact.csv
 """
 
 from __future__ import annotations

@@ -3,9 +3,9 @@
 Run k-fold validation on a geometry-and-energy compact training CSV.
 Example:
 python3 surrogate/k_fold_validation.py \
-  -i surrogate/csv_data/training_compact/training_NK_compact_0.csv \
-  -o surrogate/csv_data/predictions/k_fold_summary_0.csv \
-  --predictions-out surrogate/csv_data/predictions/k_fold_predictions_0.csv
+  -i surrogate/iterations/1_GeV/iteration_0/training_compact_0.csv \
+  -o surrogate/iterations/1_GeV/predictions/k_fold_summary_0.csv \
+  --predictions-out surrogate/iterations/1_GeV/predictions/k_fold_predictions_0.csv
 """
 
 from __future__ import annotations
