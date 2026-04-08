@@ -72,7 +72,7 @@ def main() -> int:
     # Build the YAML variant records from the scaled sample rows.
     for sample_index, sample_row in enumerate(scaled_sample):
         variant: dict[str, object] = {"tag": f"{arguments.tag_prefix}{sample_index:03d}"}
-        # Write one rounded parameter value for each sampled thickness dimension.
+        # Write the sweep thickness values as bare centimeter numbers.
         for (parameter_name, *_), value in zip(LAYER_THICKNESS_BOUNDS, sample_row):
             variant[parameter_name] = round(float(value), 4)
         variants.append(variant)

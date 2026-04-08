@@ -7,19 +7,19 @@ import argparse
 import csv
 import json
 import shlex
-import shutil
 import subprocess
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from .geometry_index import GeometryVariant
+from .geometry_index import GeometryVariant, eval_geometry_length_mm
 from .run_plan import RunPlan, RunRecord
 
 PROJECT_DIRECTORY = Path(__file__).resolve().parents[2]
 GEOMETRY_DIRECTORY = PROJECT_DIRECTORY / "geometries"
 SIMULATION_DIRECTORY = PROJECT_DIRECTORY / "simulation"
 DATA_DIRECTORY = PROJECT_DIRECTORY / "data"
+REFERENCE_MIP_PATH = SIMULATION_DIRECTORY / "calibration" / "reference_mip_4mm.json"
 
 
 # Create the directory tree needed by a later output file.
@@ -59,7 +59,6 @@ def flatten_process_extras(chunks: Sequence[Optional[str]]) -> List[str]:
         flags.extend(shlex.split(chunk))
     return flags
 
-
 # Materialize the generated geometry set before conductor builds run plans from it.
 def maybe_run_sweeps(args: argparse.Namespace, spec_paths: List[Path]) -> None:
     sweep_script = GEOMETRY_DIRECTORY / "sweep_geometries.py"
@@ -83,13 +82,14 @@ def maybe_run_sweeps(args: argparse.Namespace, spec_paths: List[Path]) -> None:
         run_cmd(command, dry_run=args.dry_run, label="sweep")
 
 
-# Build one muon-control calibration file per geometry from per-layer muon deposits.
+# Build one explicit muon-control calibration file from per-layer muon deposits.
 def run_mip_calibration(
     args: argparse.Namespace,
     geometry_variant: GeometryVariant,
     extra_process_flags: List[str],
 ) -> Path:
-    """Run the muon control chain and write one geometry-level calibration.json."""
+    """Run the explicit muon control chain and write one calibration.json."""
+    muon_event_count = int(getattr(args, "muon_events", 2000))
     calibration_directory = DATA_DIRECTORY / "processed" / geometry_variant.geometry_id / "run_mu_ctrl"
     ensure_dir(calibration_directory)
     raw_output_path = DATA_DIRECTORY / "raw" / geometry_variant.geometry_id / "run_mu_ctrl" / "run_mu_ctrl.edm4hep.root"
@@ -108,7 +108,7 @@ def run_mip_calibration(
         "--outputFile",
         str(raw_output_path),
         "--numberOfEvents",
-        str(args.muon_events),
+        str(muon_event_count),
         "--enableGun",
         "--gun.particle",
         "mu-",
@@ -152,14 +152,68 @@ def run_mip_calibration(
     return calibration_path
 
 
-def copy_calibration(calibration_path: Path, run_plan: RunPlan, dry_run: bool) -> None:
-    """Copy one geometry-level calibration.json into the run-specific output directory."""
-    if dry_run:
-        print(f"[calibration] copy {calibration_path} -> {run_plan.calibration_path}")
-        return
+def write_scaled_mip_calibration(
+    args: argparse.Namespace,
+    run_plan: RunPlan,
+) -> Path:
+    """Write one run-local calibration.json by scaling a measured 4 mm reference MIP."""
     ensure_dir(run_plan.calibration_path.parent)
-    shutil.copyfile(calibration_path, run_plan.calibration_path)
-    print(f"[calibration] wrote {run_plan.calibration_path}")
+    calibration_path = run_plan.calibration_path
+
+    if calibration_path.exists() and not args.overwrite:
+        print(f"[mip_calibration] Skipping calibration for {run_plan.run_id}, output exists at {calibration_path}")
+        return calibration_path
+
+    if not REFERENCE_MIP_PATH.exists():
+        raise FileNotFoundError(f"{REFERENCE_MIP_PATH} not found.")
+
+    with REFERENCE_MIP_PATH.open("r", encoding="utf-8") as reference_file:
+        reference_payload = json.load(reference_file)
+
+    reference_thickness_mm = float(reference_payload["reference_thickness_mm"])
+    reference_mpv_gev = float(reference_payload["reference_mpv_GeV"])
+    if reference_thickness_mm <= 0.0:
+        raise ValueError("reference_thickness_mm must be positive.")
+    if reference_mpv_gev <= 0.0:
+        raise ValueError("reference_mpv_GeV must be positive.")
+
+    segment_thicknesses_mm: List[float] = []
+    mpvs: List[float] = []
+    thresholds: List[float] = []
+
+    for segment_index in range(1, 4):
+        key = f"t_scin_seg{segment_index}"
+        if key not in run_plan.geometry_variant.params:
+            raise ValueError(f"Missing {key} in geometry parameters for {run_plan.geometry_variant.geometry_id}.")
+        thickness_mm = eval_geometry_length_mm(run_plan.geometry_variant.params[key])
+        if thickness_mm <= 0.0:
+            raise ValueError(f"{key} must be positive for {run_plan.geometry_variant.geometry_id}.")
+        
+        # Linear scaling w/ thickness
+        mpv_gev = reference_mpv_gev * (thickness_mm / reference_thickness_mm)
+        segment_thicknesses_mm.append(thickness_mm)
+        mpvs.append(mpv_gev)
+        thresholds.append(args.mip_alpha * mpv_gev)
+
+    payload: Dict[str, Any] = {
+        "alpha": args.mip_alpha,
+        "reference_geometry_id": reference_payload.get("reference_geometry_id"),
+        "reference_thickness_mm": reference_thickness_mm,
+        "reference_mpv_GeV": reference_mpv_gev,
+        "segment_scintillator_thicknesses_mm": segment_thicknesses_mm,
+        "mpvs": mpvs,
+        "thresholds": thresholds,
+    }
+
+    if args.dry_run:
+        print(f"[mip_calibration] write {calibration_path}")
+        return calibration_path
+
+    with calibration_path.open("w", encoding="utf-8") as calibration_file:
+        json.dump(payload, calibration_file, indent=2)
+        calibration_file.write("\n")
+    print(f"[mip_calibration] Wrote {calibration_path}")
+    return calibration_path
 
 
 # Run the detector simulation step for one planned sample and return its wall-clock time.

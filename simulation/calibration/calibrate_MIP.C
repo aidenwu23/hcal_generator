@@ -1,5 +1,5 @@
 /*
-Build MIP-based segment thresholds from a processed muon events.root file.
+Measure the reference MIP scale from a processed muon events.root file.
 Example:
 root -l -b -q 'simulation/calibration/calibrate_MIP.C("data/processed/04e3fdfb/run_mu_ctrl/events.root","data/processed/04e3fdfb/run_mu_ctrl/calibration.json",0.5)'
 */

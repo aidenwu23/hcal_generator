@@ -17,8 +17,8 @@
     <constant name="world_dy"   value="5*m"/>
     <constant name="world_dz"   value="5*m"/>
     <!-- XY segmentation (keep your centered grid) -->
-    <constant name="cell_x"    value="10*mm"/>
-    <constant name="cell_y"    value="10*mm"/>
+    <constant name="cell_x"    value="100*mm"/>
+    <constant name="cell_y"    value="100*mm"/>
     <constant name="seg_offset_x" value="0*mm"/>
     <constant name="seg_offset_y" value="0*mm"/>
   </define>

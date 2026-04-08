@@ -43,6 +43,24 @@ def eval_length_mm(value: object) -> float:
                 raise ValueError(f"Invalid geometry length expression: {value!r}") from error
     raise ValueError(f"Unsupported geometry length value: {value!r}")
 
+
+# Treat bare numeric geometry metadata values as centimeters and explicit expressions as DD4hep lengths.
+def eval_geometry_length_mm(value: object) -> float:
+    """Evaluate a geometry metadata length in millimeter."""
+    if value is None:
+        raise ValueError("Required geometry length is missing.")
+    if isinstance(value, (int, float)):
+        return float(value) * 10.0
+    if isinstance(value, str):
+        expression = value.strip()
+        if not expression:
+            raise ValueError("Required geometry length is empty.")
+        try:
+            return float(expression) * 10.0
+        except ValueError:
+            return eval_length_mm(expression)
+    raise ValueError(f"Unsupported geometry length value: {value!r}")
+
 # One generated geometry plus the paths and parameter payload that describe it.
 @dataclass
 class GeometryVariant:

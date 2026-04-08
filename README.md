@@ -43,6 +43,9 @@ c2bbd5d3:|0.4878|0.7448 |0.8081|
 - Compact training CSVs are keyed by `(geometry_id, kinetic_energy_GeV)`.
 - BO scoring is evaluated across exact `kinetic_energy_GeV` points from `geometries/sweeps/bo_spec.yaml`.
 - Energy resolution is normalized to `total_energy_GeV` for now.
+- Sweep geometry thickness values are stored as bare numbers in `cm`.
+- Generated geometry XML/JSON files store thicknesses as explicit DD4hep length expressions like `0.4*cm`.
+- Downstream Python helpers normalize geometry lengths before using them.
 
 ## Setup
 
@@ -60,7 +63,7 @@ source setup.sh            # add build outputs to PATH and set library paths
 The optimization loop alternates between two scripts:
 
 ```
-sweep YAML --> conductor.py --> ddsim --> event processor --> calibration --> performance metrics
+sweep YAML --> conductor.py --> ddsim --> event processor --> thickness-scaled calibration --> performance metrics
 
 performance metrics --> orchestrator --> train surrogate/select best observed --> propose batch --> set up next sweep yaml
 ```
@@ -75,7 +78,7 @@ python3 geometries/generate_lhs.py --help
 
 ### 2. Run a simulation campaign
 
-`conductor.py` takes one or more sweep YAMLs, materializes the geometries, simulates each one, and writes processed performance outputs.
+`conductor.py` takes one or more sweep YAMLs, materializes the geometries, simulates each one, scales a measured 4 mm MIP reference by segment scintillator thickness, and writes processed performance outputs.
 
 ```bash
 python3 conductor.py --help

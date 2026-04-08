@@ -20,6 +20,8 @@ import argparse, json
 from pathlib import Path
 import pandas as pd
 
+from simulation.helpers.geometry_index import eval_geometry_length_mm
+
 
 def _extract(meta_p: Path, calibration_p: Path, perf_p: Path, geometry_root: Path) -> dict:
     # meta.json provides beam config, calibration.json provides threshold, and performance.json provides metrics.
@@ -74,6 +76,13 @@ def _pairs(processed_root: Path):
             yield meta_path, calibration_path, perf_path
 
 
+def _geometry_thickness_cm(value: object) -> float | None:
+    # Keep the training CSV thickness columns in centimeters.
+    if value is None:
+        return None
+    return eval_geometry_length_mm(value) / 10.0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--processed-root", required=True, help="Path to hcal_optimizer/data/processed")
@@ -98,7 +107,9 @@ def main():
     df = pd.DataFrame(rows)
     
     thickness_cols = ["t_absorber_seg1", "t_absorber_seg2", "t_absorber_seg3", "t_scin_seg1", "t_scin_seg2", "t_scin_seg3", "t_spacer"]
-    df[thickness_cols] = df[thickness_cols].apply(lambda s: pd.to_numeric(s.astype(str).str.replace("*cm", "", regex=False).str.strip(), errors="coerce"))
+    for column_name in thickness_cols:
+        if column_name in df.columns:
+            df[column_name] = df[column_name].map(_geometry_thickness_cm)
     
     preferred = [
         "geometry_id", "run_id", "gun_particle",

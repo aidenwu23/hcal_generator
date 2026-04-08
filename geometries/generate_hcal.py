@@ -87,7 +87,7 @@ def convert_json_value(value_text: str) -> object:
     return value_text
 
 
-# Keep segment thickness overrides explicit in centimeters.
+# Keep sweep thickness inputs in centimeters and write explicit DD4hep unit expressions.
 def normalize_hcal_parameter_value(key_text: str, value_text: str) -> str:
     stripped_value = value_text.strip()
     if key_text in SEGMENT_LENGTH_KEYS and NUMERIC_PATTERN.match(stripped_value):

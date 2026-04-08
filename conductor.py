@@ -6,7 +6,12 @@ processed performance results for orchestrator.py.
 Example: 
 python3 conductor.py --spec geometries/sweeps/bhcal.yaml \
   --mip-alpha 0.5 \
-  --muon-events 2000 \
+  --events 3000 \
+  --gun-particle neutron \
+  --gun-kinetic-energy 1 \
+  --seeds 67 --delete-intermediates && \
+python3 conductor.py --spec geometries/sweeps/control/bhcal_2x_scint.yaml \
+  --mip-alpha 0.5 \
   --events 3000 \
   --gun-particle neutron \
   --gun-kinetic-energy 1 \
@@ -25,14 +30,13 @@ from simulation.helpers.geometry_index import inspect_geometry_rows, load_geomet
 from simulation.helpers.run_plan import RunRecord, build_run_plans
 from simulation.helpers.run_steps import (
     DATA_DIRECTORY,
-    copy_calibration,
     flatten_process_extras,
     maybe_remove_file,
     maybe_run_sweeps,
     run_ddsim,
-    run_mip_calibration,
     run_performance_analysis,
     run_process,
+    write_scaled_mip_calibration,
     write_metadata,
     write_run_manifests,
 )
@@ -78,7 +82,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gun-position", default="0 0 0", help="Gun position string passed to ddsim.")
     parser.add_argument("--gun-direction", default="0 0 -1", help="Gun direction string passed to ddsim.")
     parser.add_argument("--events", type=int, default=1, help="Number of signal events per ddsim run.")
-    parser.add_argument("--muon-events", type=int, default=2000, help="Number of muon-control events used to estimate the MIP MPV.")
     parser.add_argument("--seeds", type=int, nargs="+", help="Random seeds for ddsim. Omit to let ddsim pick its own.")
     parser.add_argument(
         "--mip-alpha",
@@ -156,15 +159,11 @@ def main() -> None:
     run_records: List[RunRecord] = []
     any_run_plans = False
     for geometry_variant in geometry_variants:
-        geometry_calibration_path = None
-
         # Expand only this geometry into run plans so all of its energies and seeds stay together.
         geometry_run_plans = build_run_plans(args, [geometry_variant], extra_process_flags)
         if not geometry_run_plans:
             continue
         any_run_plans = True
-        if has_non_muon_signal_particle:
-            geometry_calibration_path = run_mip_calibration(args, geometry_variant, extra_process_flags)
 
         # Finish every planned run for this geometry before moving to the next geometry.
         for run_plan in geometry_run_plans:
@@ -191,9 +190,7 @@ def main() -> None:
                 run_record.meta_seconds = write_metadata(args, run_plan)
                 
                 if not is_muon_signal:
-                    if geometry_calibration_path is None:
-                        raise ValueError("Missing geometry-level MIP calibration.")
-                    copy_calibration(geometry_calibration_path, run_plan, args.dry_run)
+                    write_scaled_mip_calibration(args, run_plan)
 
                 if not is_muon_signal:
                     run_record.performance_seconds = run_performance_analysis(args, run_plan)
