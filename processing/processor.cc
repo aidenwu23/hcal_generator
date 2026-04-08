@@ -4,6 +4,8 @@
 
 #include <cmath>
 #include <algorithm>
+#include <array>
+#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <optional>
@@ -18,6 +20,18 @@
 
 #include "edm4hep/MCParticleCollection.h"
 #include "edm4hep/SimCalorimeterHitCollection.h"
+
+namespace {
+
+constexpr int kLayerCount = 10;
+constexpr int kLayerBitOffset = 8;
+constexpr std::uint64_t kLayerMask = 0xFF;
+
+int decode_layer_index(std::uint64_t cell_id) {
+  return static_cast<int>((cell_id >> kLayerBitOffset) & kLayerMask);
+}
+
+}  // namespace
 
 static bool hasArg(int argc, char** argv, const std::string& key) {
   for (int i = 1; i < argc; ++i) if (key == argv[i]) return true; return false;
@@ -85,11 +99,15 @@ int main(int argc, char** argv) {
   }
 
   float  t_mc_E=0;
-  float  t_visible_E=0;
+  std::array<float, kLayerCount> t_layer_E {};
 
   TTree* events = new TTree("events", "per-event dataset");
   events->Branch("mc_E",   &t_mc_E);
-  events->Branch("visible_E",  &t_visible_E);
+  for (int layer_index = 0; layer_index < kLayerCount; ++layer_index) {
+    events->Branch(
+        ("layer_" + std::to_string(layer_index) + "_E").c_str(),
+        &t_layer_E[static_cast<size_t>(layer_index)]);
+  }
   size_t nEvents=0, nWithMC=0, nWithSim=0;
 
   podio::ROOTReader reader;
@@ -183,9 +201,9 @@ int main(int argc, char** argv) {
       ++nWithMC;
     }
 
-    t_visible_E = 0.f;
+    t_layer_E.fill(0.f);
 
-    // Load the calorimeter hit collection and collapse it to one total energy.
+    // Load the calorimeter hit collection.
     const edm4hep::SimCalorimeterHitCollection* simCollection = nullptr;
     try {
       simCollection = &frame.get<edm4hep::SimCalorimeterHitCollection>("HCal_Readout");
@@ -193,12 +211,19 @@ int main(int argc, char** argv) {
     if (simCollection && debug && nEvents==1) std::cerr << "[process] Using Sim collection: HCal_Readout (size=" << simCollection->size() << ")\n";
 
     if (simCollection) {
+      // Increment non-empty counter
       if (!simCollection->empty()) {
         ++nWithSim;
       }
+
+      // Sum up all hit energy per layer.
       for (const auto& hit : *simCollection) {
+        const int layer_index = decode_layer_index(static_cast<std::uint64_t>(hit.getCellID()));
+        if (layer_index < 0 || layer_index >= kLayerCount) {
+          continue;
+        }
         const double e = hit.getEnergy();
-        t_visible_E += (float)e;
+        t_layer_E[static_cast<size_t>(layer_index)] += static_cast<float>(e);
       }
     }
 

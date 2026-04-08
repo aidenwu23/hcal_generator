@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import shlex
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -82,57 +83,83 @@ def maybe_run_sweeps(args: argparse.Namespace, spec_paths: List[Path]) -> None:
         run_cmd(command, dry_run=args.dry_run, label="sweep")
 
 
-# Produce the muon control calibration that defines the visible-energy detect threshold for one geometry.
-def run_muon_calibration(args: argparse.Namespace, geometry_variant: GeometryVariant) -> Path:
-    # Run the muon control chain and optionally remove its ROOT intermediates afterward.
+# Build one muon-control calibration file per geometry from per-layer muon deposits.
+def run_mip_calibration(
+    args: argparse.Namespace,
+    geometry_variant: GeometryVariant,
+    extra_process_flags: List[str],
+) -> Path:
+    """Run the muon control chain and write one geometry-level calibration.json."""
     calibration_directory = DATA_DIRECTORY / "processed" / geometry_variant.geometry_id / "run_mu_ctrl"
     ensure_dir(calibration_directory)
-    output_path = calibration_directory / "fpr_calibration.json"
-
-    # Reuse the calibration file if it is already present and the caller did not ask to overwrite it.
-    if output_path.exists() and not args.overwrite:
-        print(f"[muon_calib] Skipping calibration for {geometry_variant.geometry_id}, output exists at {output_path}")
-        return output_path
-
-    # Muons are minimum-ionizing particles, so they produce a well-defined, small visible-energy
-    # deposit with no hadronic response. The muon control sample runs through the same ddsim and
-    # processor chain, then calibrate_fpr.py fits the visible-energy distribution and returns the
-    # threshold that keeps the false-positive rate at the requested level.
     raw_output_path = DATA_DIRECTORY / "raw" / geometry_variant.geometry_id / "run_mu_ctrl" / "run_mu_ctrl.edm4hep.root"
     events_output_path = calibration_directory / "events.root"
+    calibration_path = calibration_directory / "calibration.json"
+
+    if calibration_path.exists() and not args.overwrite:
+        print(f"[mip_calibration] Skipping calibration for {geometry_variant.geometry_id}, output exists at {calibration_path}")
+        return calibration_path
+
     ensure_dir(raw_output_path.parent)
-    command = [
-        args.python,
-        str(SIMULATION_DIRECTORY / "calibration" / "calibrate_fpr.py"),
-        "--compact-xml",
-        str(geometry_variant.xml_path),
-        "--raw-out",
-        str(raw_output_path),
-        "--events-out",
-        str(events_output_path),
-        "--json-out",
-        str(output_path),
-        "--ddsim",
+    ddsim_command = [
         args.ddsim,
-        "--process-bin",
-        args.process_bin,
-        "--root-bin",
-        args.root_bin,
-        "--gun-particle",
-        "mu-",
-        "--gun-energy",
-        "10*GeV",
-        "--n-events",
+        "--compactFile",
+        str(geometry_variant.xml_path),
+        "--outputFile",
+        str(raw_output_path),
+        "--numberOfEvents",
         str(args.muon_events),
-        "--metric",
-        "visible_E",
-        "--target-fpr",
-        "0.01",
+        "--enableGun",
+        "--gun.particle",
+        "mu-",
+        "--gun.energy",
+        "10*GeV",
+        "--gun.direction",
+        args.gun_direction,
+        "--gun.position",
+        args.gun_position,
+        "--part.keepAllParticles",
+        "true",
+        "--part.minimalKineticEnergy",
+        "0*MeV",
+        "--part.minDistToParentVertex",
+        "0*mm",
     ]
-    run_cmd(command, dry_run=args.dry_run, label="muon_calibration")
+    run_cmd(ddsim_command, dry_run=args.dry_run, label="mip_muon_ddsim")
+
+    process_command = [
+        args.process_bin,
+        str(raw_output_path),
+        "--out",
+        str(events_output_path),
+        "--expected-pdg",
+        "-13",
+    ] + extra_process_flags
+    run_cmd(process_command, dry_run=args.dry_run, label="mip_muon_process")
+
+    macro_path = SIMULATION_DIRECTORY / "calibration" / "calibrate_MIP.C"
+    calibration_command = [
+        args.root_bin,
+        "-l",
+        "-b",
+        "-q",
+        f'{macro_path}("{events_output_path}","{calibration_path}",{args.mip_alpha:.12g})',
+    ]
+    run_cmd(calibration_command, dry_run=args.dry_run, label="mip_calibration")
+
     maybe_remove_file(args, raw_output_path)
     maybe_remove_file(args, events_output_path)
-    return output_path
+    return calibration_path
+
+
+def copy_calibration(calibration_path: Path, run_plan: RunPlan, dry_run: bool) -> None:
+    """Copy one geometry-level calibration.json into the run-specific output directory."""
+    if dry_run:
+        print(f"[calibration] copy {calibration_path} -> {run_plan.calibration_path}")
+        return
+    ensure_dir(run_plan.calibration_path.parent)
+    shutil.copyfile(calibration_path, run_plan.calibration_path)
+    print(f"[calibration] wrote {run_plan.calibration_path}")
 
 
 # Run the detector simulation step for one planned sample and return its wall-clock time.
@@ -223,64 +250,6 @@ def write_metadata(
         json.dump(payload, metadata_file, indent=2)
     print(f"[meta] wrote {run_plan.meta_path}")
     return time.time() - start
-
-
-# Write the calibration constants that belong to one processed run.
-def write_calibration(
-    args: argparse.Namespace,
-    run_plan: RunPlan,
-    response_scale: Optional[float] = None,
-) -> None:
-    """Write calibration.json with the run-level calibration constants."""
-    payload: Dict[str, Any] = {
-        "muon_threshold_GeV": args.muon_threshold,
-    }
-
-    # Add the particle response scale only for runs where that calibration was actually derived.
-    if response_scale is not None:
-        payload["response_scale"] = response_scale
-    if args.dry_run:
-        print(f"[calibration] write {run_plan.calibration_path}")
-        return
-    ensure_dir(run_plan.calibration_path.parent)
-    with run_plan.calibration_path.open("w", encoding="utf-8") as calibration_file:
-        json.dump(payload, calibration_file, indent=2)
-    print(f"[calibration] wrote {run_plan.calibration_path}")
-
-
-# Derive the particle visible-to-truth response scale from the processed events tree for one run.
-def run_particle_response_calibration(
-    args: argparse.Namespace,
-    run_plan: RunPlan,
-) -> Tuple[float, Optional[float]]:
-    """Derive one visible-to-truth response scale from the processed events tree."""
-    calibration_path = run_plan.calibration_path
-    ensure_dir(calibration_path.parent)
-    macro_path = SIMULATION_DIRECTORY / "calibration" / "calibrate_particle_response.C"
-
-    # Hand the processed events tree, beam energy, and detect threshold to the ROOT calibration macro.
-    command = [
-        args.root_bin,
-        "-l",
-        "-b",
-        "-q",
-        f'{macro_path}("{run_plan.events_path}",{run_plan.total_energy_GeV:.12g},{args.muon_threshold:.12g},"{calibration_path}")',
-    ]
-    start = time.time()
-    run_cmd(command, dry_run=args.dry_run, label="particle_response_calibration")
-    elapsed = time.time() - start
-    if args.dry_run:
-        return elapsed, None
-
-    # Read back the response_scale so conductor can write it into the run-level calibration file.
-    if not calibration_path.exists():
-        raise FileNotFoundError(f"Missing particle response calibration output: {calibration_path}")
-    with calibration_path.open("r", encoding="utf-8") as calibration_file:
-        payload = json.load(calibration_file)
-    response_scale = payload.get("response_scale")
-    if response_scale is None:
-        raise ValueError(f"response_scale missing in {calibration_path}")
-    return elapsed, float(response_scale)
 
 
 # Run the fixed ROOT performance macro on one processed sample.

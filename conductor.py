@@ -4,24 +4,11 @@ Generate geometries from a sweep spec, run simulation and analysis, and write
 processed performance results for orchestrator.py.
 
 Example: 
-python3 conductor.py --spec geometries/sweeps/runs/results.yaml \
-  --muon-threshold 0.02 \
+python3 conductor.py --spec geometries/sweeps/bhcal.yaml \
+  --mip-alpha 0.5 \
+  --muon-events 2000 \
   --events 3000 \
-  --gun-particle neutron kaon0L \
-  --gun-kinetic-energy 1 \
-  --seeds 10000 10001 10002 10003 10004 10005 10006 10007 10008 10009 --delete-intermediates
-
-python3 conductor.py --spec geometries/sweeps/proposed/proposed_1.yaml \
-  --muon-threshold 0.02 \
-  --events 3000 \
-  --gun-particle neutron kaon0L \
-  --gun-kinetic-energy 1 \
-  --seeds 67 --delete-intermediates
-
-python3 conductor.py --spec geometries/sweeps/runs/full_run.yaml \
-  --muon-threshold 0.02 \
-  --events 3000 \
-  --gun-particle neutron kaon0L \
+  --gun-particle neutron \
   --gun-kinetic-energy 1 \
   --seeds 67 --delete-intermediates
 """
@@ -29,7 +16,6 @@ python3 conductor.py --spec geometries/sweeps/runs/full_run.yaml \
 from __future__ import annotations
 
 import argparse
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -39,15 +25,14 @@ from simulation.helpers.geometry_index import inspect_geometry_rows, load_geomet
 from simulation.helpers.run_plan import RunRecord, build_run_plans
 from simulation.helpers.run_steps import (
     DATA_DIRECTORY,
+    copy_calibration,
     flatten_process_extras,
     maybe_remove_file,
     maybe_run_sweeps,
     run_ddsim,
-    run_particle_response_calibration,
-    run_muon_calibration,
+    run_mip_calibration,
     run_performance_analysis,
     run_process,
-    write_calibration,
     write_metadata,
     write_run_manifests,
 )
@@ -93,18 +78,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gun-position", default="0 0 0", help="Gun position string passed to ddsim.")
     parser.add_argument("--gun-direction", default="0 0 -1", help="Gun direction string passed to ddsim.")
     parser.add_argument("--events", type=int, default=1, help="Number of signal events per ddsim run.")
-    parser.add_argument(
-        "--muon-events",
-        type=int,
-        default=2000,
-        help="Number of muon-control events used for threshold calibration.",
-    )
+    parser.add_argument("--muon-events", type=int, default=2000, help="Number of muon-control events used to estimate the MIP MPV.")
     parser.add_argument("--seeds", type=int, nargs="+", help="Random seeds for ddsim. Omit to let ddsim pick its own.")
     parser.add_argument(
-        "--muon-threshold",
+        "--mip-alpha",
         type=float,
-        default=None,
-        help="Fixed visible-energy threshold in GeV. Omit to calibrate one threshold per geometry.",
+        default=0.5,
+        help="Threshold in fractions of one MIP.",
     )
     parser.add_argument("--manifest-json", default=str(DATA_DIRECTORY / "manifests" / "run_manifest.json"), help="Path for JSON run manifest.")
     parser.add_argument("--manifest-csv", default=str(DATA_DIRECTORY / "manifests" / "run_manifest.csv"), help="Path for CSV run manifest.")
@@ -170,34 +150,21 @@ def main() -> None:
     if not requested_particles:
         raise ValueError("At least one --gun-particle value is required.")
     args.gun_particle = requested_particles
-
-    requested_particle_names = {particle.lower() for particle in requested_particles}
-    all_requested_particles_are_muons = requested_particle_names.issubset({"mu-", "mu+"})
-    has_non_muon_signal_particle = not all_requested_particles_are_muons
+    has_non_muon_signal_particle = any(particle.lower() not in {"mu-", "mu+"} for particle in requested_particles)
 
     # Run one geometry at a time so each geometry finishes fully before the next one starts.
     run_records: List[RunRecord] = []
     any_run_plans = False
     for geometry_variant in geometry_variants:
-        geometry_muon_threshold = args.muon_threshold
-
-        # For non-muon campaigns, derive one threshold per geometry only when the caller did
-        # not provide a fixed threshold on the CLI.
-        if has_non_muon_signal_particle and geometry_muon_threshold is None:
-            calibration_json_path = run_muon_calibration(args, geometry_variant)
-            if not args.dry_run:
-                with calibration_json_path.open("r", encoding="utf-8") as calibration_file:
-                    payload = json.load(calibration_file)
-                threshold_value = payload.get("muon_threshold_GeV")
-                if threshold_value is None:
-                    raise ValueError(f"muon_threshold_GeV missing in {calibration_json_path}")
-                geometry_muon_threshold = float(threshold_value)
+        geometry_calibration_path = None
 
         # Expand only this geometry into run plans so all of its energies and seeds stay together.
         geometry_run_plans = build_run_plans(args, [geometry_variant], extra_process_flags)
         if not geometry_run_plans:
             continue
         any_run_plans = True
+        if has_non_muon_signal_particle:
+            geometry_calibration_path = run_mip_calibration(args, geometry_variant, extra_process_flags)
 
         # Finish every planned run for this geometry before moving to the next geometry.
         for run_plan in geometry_run_plans:
@@ -210,16 +177,8 @@ def main() -> None:
                 print(f"[skip] {run_plan.run_id} (events already present)")
                 continue
 
-            saved_muon_threshold = args.muon_threshold
-
             try:
-                response_scale = None
                 is_muon_signal = run_plan.gun_particle.strip().lower() in ("mu-", "mu+")
-
-                # Use either the fixed CLI threshold or the derived geometry threshold on each
-                # non-muon run.
-                if not is_muon_signal and geometry_muon_threshold is not None:
-                    args.muon_threshold = geometry_muon_threshold
 
                 # Run the full chain for this plan from simulation through analysis outputs.
                 run_record.ddsim_seconds = run_ddsim(args, run_plan)
@@ -229,23 +188,24 @@ def main() -> None:
                     extra_process_flags,
                 )
                 maybe_remove_file(args, run_plan.raw_path)
-                if not is_muon_signal:
-                    _, response_scale = run_particle_response_calibration(args, run_plan)
                 run_record.meta_seconds = write_metadata(args, run_plan)
-                write_calibration(args, run_plan, response_scale)
+                
+                if not is_muon_signal:
+                    if geometry_calibration_path is None:
+                        raise ValueError("Missing geometry-level MIP calibration.")
+                    copy_calibration(geometry_calibration_path, run_plan, args.dry_run)
+
                 if not is_muon_signal:
                     run_record.performance_seconds = run_performance_analysis(args, run_plan)
                 maybe_remove_file(args, run_plan.events_path)
                 run_record.status = "completed"
+
             except subprocess.CalledProcessError as exc:
                 run_record.status = "failed"
                 run_record.error = f"{exc.cmd} -> exit {exc.returncode}"
             except Exception as exc:
                 run_record.status = "failed"
                 run_record.error = str(exc)
-            finally:
-                # Restore the caller-level threshold before the next run starts.
-                args.muon_threshold = saved_muon_threshold
 
             run_records.append(run_record)
 
