@@ -103,7 +103,7 @@ void performance(const char* events_path_cstr, const char* meta_path_cstr = "",
   }
 
   if (!meta_json.contains("geometry_id") || !meta_json.contains("gun_particle") ||
-      !meta_json.contains("total_energy_GeV") || !calibration_json.contains("thresholds")) {
+      !meta_json.contains("momentum_GeV") || !calibration_json.contains("thresholds")) {
     std::cerr << "[performance] Missing required metadata or calibration fields.\n";
     return;
   }
@@ -112,7 +112,7 @@ void performance(const char* events_path_cstr, const char* meta_path_cstr = "",
     return;
   }
 
-  const double total_energy_GeV = meta_json["total_energy_GeV"].get<double>();
+  const double momentum_GeV = meta_json["momentum_GeV"].get<double>();
   std::array<double, 3> thresholds {};
   for (std::size_t segment_index = 0; segment_index < thresholds.size(); ++segment_index) {
     thresholds[segment_index] = calibration_json["thresholds"][segment_index].get<double>();
@@ -156,7 +156,7 @@ void performance(const char* events_path_cstr, const char* meta_path_cstr = "",
 
     // Require valid energy
     const double mc_energy_GeV = static_cast<double>(mc_E);
-    if (mc_energy_GeV <= 0.0 || total_energy_GeV <= 0.0) {
+    if (mc_energy_GeV <= 0.0 || momentum_GeV <= 0.0) {
       continue;
     }
 

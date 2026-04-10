@@ -34,28 +34,6 @@ PARTICLE_PDG: Dict[str, int] = {
     "gamma": 22,
 }
 
-PARTICLE_REST_MASS_GEV: Dict[str, float] = {
-    "neutron": 0.9395654205,
-    "proton": 0.9382720882,
-    "kaon0l": 0.497611,
-    "kaon0L": 0.497611,
-    "pi-": 0.13957039,
-    "pi+": 0.13957039,
-    "pion-": 0.13957039,
-    "pion+": 0.13957039,
-    "pion0": 0.1349768,
-    "pi0": 0.1349768,
-    "mu-": 0.1056583755,
-    "mu+": 0.1056583755,
-    "electron": 0.00051099895,
-    "e-": 0.00051099895,
-    "positron": 0.00051099895,
-    "e+": 0.00051099895,
-    "photon": 0.0,
-    "gamma": 0.0,
-}
-
-
 # Translate the conductor particle names into the PDG codes expected by the processor.
 def lookup_pdg(particle: str) -> Optional[int]:
     """Translate a human-readable particle name into a PDG code when possible."""
@@ -65,22 +43,12 @@ def lookup_pdg(particle: str) -> Optional[int]:
     return PARTICLE_PDG.get(particle_name.lower())
 
 
-# Translate the conductor particle names into the rest-mass energy needed for kinetic-energy input.
-def lookup_rest_mass_gev(particle: str) -> Optional[float]:
-    """Translate a human-readable particle name into a rest-mass energy in GeV when possible."""
-    particle_name = particle.strip()
-    if particle_name in PARTICLE_REST_MASS_GEV:
-        return PARTICLE_REST_MASS_GEV[particle_name]
-    return PARTICLE_REST_MASS_GEV.get(particle_name.lower())
-
-
 # One fully expanded simulation run, including all file paths that later execution steps need.
 @dataclass
 class RunPlan:
     geometry_variant: GeometryVariant
     gun_particle: str
-    kinetic_energy_GeV: Optional[float]
-    total_energy_GeV: float
+    momentum_GeV: float
     gun_direction: str
     gun_position: str
     seed: Optional[int]
@@ -143,8 +111,7 @@ def build_run_plans(
     run_plans: List[RunPlan] = []
     seed_values: List[Optional[int]] = list(args.seeds) if args.seeds is not None else [None]
     requested_particles = [str(particle).strip() for particle in args.gun_particle if str(particle).strip()]
-    use_kinetic_energy = args.gun_kinetic_energy is not None
-    energy_values = list(args.gun_kinetic_energy) if use_kinetic_energy else list(args.gun_energy)
+    momentum_values = list(args.gun_momentum)
     for geometry_variant in geometry_variants:
         # Include the processor extras, geometry tag, and detector side in the run identity so
         # distinct physical or processing configurations do not collide onto the same run id.
@@ -155,24 +122,14 @@ def build_run_plans(
         # Sweep over every requested particle
         for particle in requested_particles:
             expected_pdg = lookup_pdg(particle)
-            rest_mass_gev = lookup_rest_mass_gev(particle)
-            if use_kinetic_energy:
-                if rest_mass_gev is None:
-                    raise ValueError(f"No rest mass configured for particle '{particle}' used with --gun-kinetic-energy.")
-            # Per particle, sweep all requested energies
-            for energy in energy_values:
-                if use_kinetic_energy:
-                    kinetic_energy_gev = energy
-                    total_energy_gev = energy + rest_mass_gev
-                else:
-                    kinetic_energy_gev = None if rest_mass_gev is None else energy - rest_mass_gev
-                    total_energy_gev = energy
-                # Per energy, sweep every requested seed value
+            # Per particle, sweep all requested momenta
+            for momentum_gev in momentum_values:
+                # Per momentum, sweep every requested seed value
                 for seed in seed_values:
                     run_id, run_id_int = compute_run_id(
                         geometry_variant.geometry_id,
                         particle,
-                        total_energy_gev,
+                        momentum_gev,
                         seed,
                         args.events,
                         run_id_tokens,
@@ -184,8 +141,7 @@ def build_run_plans(
                         RunPlan(
                             geometry_variant=geometry_variant,
                             gun_particle=particle,
-                            kinetic_energy_GeV=kinetic_energy_gev,
-                            total_energy_GeV=total_energy_gev,
+                            momentum_GeV=momentum_gev,
                             gun_direction=gun_direction,
                             gun_position=gun_position,
                             seed=seed,

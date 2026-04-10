@@ -2,6 +2,8 @@
 
 Geometry optimizer for a generic layered calorimeter (HCal). Uses Geant4 simulations via DD4hep/ddsim to evaluate candidate geometries, trains a LightGBM surrogate on the observed results, and uses Bayesian optimization to propose improved geometry candidates. The objective is to maximize combined neutron and kaon0L detection efficiency subject to energy resolution constraints.
 
+*important* In this setup, `ddsim --gun.energy` appears to map to particle momentum in the run logs rather than total energy. The active simulation pipeline therefore uses `momentum_GeV` naming to avoid ambiguity.
+
 ## Current results:
 ### Geometry IDs and identification
 Each geometry has 10 total layers divided into 3 segments, with 3/3/4 layers in the front/middle/back segments.

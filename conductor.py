@@ -8,13 +8,13 @@ python3 conductor.py --spec geometries/sweeps/nhcal.yaml \
   --mip-alpha 0.5 \
   --events 3000 \
   --gun-particle neutron \
-  --gun-kinetic-energy 0.5 \
+  --gun-momentum 0.5 \
   --seeds 67 --delete-intermediates && \
 python3 conductor.py --spec geometries/sweeps/control/test.yaml \
   --mip-alpha 0.5 \
   --events 3000 \
   --gun-particle neutron \
-  --gun-kinetic-energy 0.5 \
+  --gun-momentum 0.5 \
   --seeds 67 --delete-intermediates
 """
 
@@ -46,11 +46,6 @@ PROJECT_DIRECTORY = Path(__file__).resolve().parent
 
 # Parse the CLI options for one campaign run.
 def parse_args() -> argparse.Namespace:
-    raw_args = sys.argv[1:]
-    gun_energy_requested = any(token == "--gun-energy" or token.startswith("--gun-energy=") for token in raw_args)
-    gun_kinetic_energy_requested = any(
-        token == "--gun-kinetic-energy" or token.startswith("--gun-kinetic-energy=") for token in raw_args
-    )
     parser = argparse.ArgumentParser(description="Orchestrate HCAL production runs.")
     parser.add_argument("--spec", "-s", nargs="+", required=True, help="Sweep spec(s) to materialise (YAML).")
     parser.add_argument("--overwrite-geos", action="store_true", help="Pass --overwrite to sweep_geometries.py.")
@@ -72,14 +67,7 @@ def parse_args() -> argparse.Namespace:
         default=["neutron"],
         help="Signal gun particle name(s).",
     )
-    parser.add_argument("--gun-energy", type=float, nargs="+", default=None, help="Total gun energies in GeV passed to ddsim.")
-    parser.add_argument(
-        "--gun-kinetic-energy",
-        type=float,
-        nargs="+",
-        default=None,
-        help="Gun kinetic energies in GeV. Converted to total energy before calling ddsim.",
-    )
+    parser.add_argument("--gun-momentum", type=float, nargs="+", default=None, help="Gun momentum values in GeV passed to ddsim.")
     parser.add_argument("--gun-position", default="0 0 0", help="Gun position string passed to ddsim.")
     parser.add_argument("--gun-direction", default="0 0 -1", help="Gun direction string passed to ddsim.")
     parser.add_argument("--events", type=int, default=1, help="Number of signal events per ddsim run.")
@@ -101,11 +89,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--python", default=sys.executable, help="Python interpreter for helper scripts.")
     args = parser.parse_args()
-    if gun_energy_requested and gun_kinetic_energy_requested:
-        print("WARNING: --gun-energy and --gun-kinetic-energy cannot be used together.", file=sys.stderr)
-        parser.error("choose only one of --gun-energy or --gun-kinetic-energy.")
-    if args.gun_energy is None and args.gun_kinetic_energy is None:
-        args.gun_energy = [5.0]
+    if args.gun_momentum is None:
+        args.gun_momentum = [5.0]
     return args
 
 

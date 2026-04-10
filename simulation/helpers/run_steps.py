@@ -222,7 +222,7 @@ def write_scaled_mip_calibration(
 def run_ddsim(args: argparse.Namespace, run_plan: RunPlan) -> float:
     """Fire ddsim for this plan and return the wall-clock seconds spent."""
     ensure_dir(run_plan.raw_path.parent)
-    energy_expression = f"{run_plan.total_energy_GeV}*GeV"
+    momentum_expression = f"{run_plan.momentum_GeV}*GeV"
 
     # Keep the gun settings and particle-tracking options explicit so the raw file contains the
     # full truth record needed by later calibration and performance steps.
@@ -240,7 +240,7 @@ def run_ddsim(args: argparse.Namespace, run_plan: RunPlan) -> float:
         "--gun.particle",
         run_plan.gun_particle,
         "--gun.energy",
-        energy_expression,
+        momentum_expression,
         "--gun.direction",
         run_plan.gun_direction,
         "--gun.position",
@@ -293,8 +293,7 @@ def write_metadata(
     payload: Dict[str, Any] = {
         "geometry_id": run_plan.geometry_variant.geometry_id,
         "gun_particle": run_plan.gun_particle,
-        "kinetic_energy_GeV": run_plan.kinetic_energy_GeV,
-        "total_energy_GeV": run_plan.total_energy_GeV,
+        "momentum_GeV": run_plan.momentum_GeV,
         "seed": run_plan.seed,
     }
     start = time.time()
@@ -340,8 +339,7 @@ def write_run_manifests(run_records: List[RunRecord], json_path: Path, csv_path:
                 "geometry_id": run_record.plan.geometry_variant.geometry_id,
                 "run_id": run_record.plan.run_id,
                 "particle": run_record.plan.gun_particle,
-                "kinetic_energy_GeV": run_record.plan.kinetic_energy_GeV,
-                "total_energy_GeV": run_record.plan.total_energy_GeV,
+                "momentum_GeV": run_record.plan.momentum_GeV,
                 "seed": run_record.plan.seed,
                 "status": run_record.status,
                 "raw_path": str(run_record.plan.raw_path),
@@ -360,8 +358,7 @@ def write_run_manifests(run_records: List[RunRecord], json_path: Path, csv_path:
         "geometry_id",
         "run_id",
         "particle",
-        "kinetic_energy_GeV",
-        "total_energy_GeV",
+        "momentum_GeV",
         "seed",
         "status",
         "raw_path",
