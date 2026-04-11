@@ -4,33 +4,25 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import re
 import xml.etree.ElementTree as xml_tree
 from datetime import datetime
 from pathlib import Path
 
 from geometry_utils import (
+    DEFAULT_TEMPLATE_PATH,
+    compute_geometry_id,
+    create_json_payload,
     find_target_detector,
+    normalize_hcal_parameter_value,
     read_detector_parameters,
+    resolve_geometry_output_paths,
     resolve_project_path,
     to_project_relative_text,
     validate_parameter_contract,
-    DEFAULT_TEMPLATE_PATH,
 )
 
-DEFAULT_OUTPUT_DIRECTORY = "geometries/generated"
 RESERVED_PARAMETER_KEYS = {"geometry_id"}
-NUMERIC_PATTERN = re.compile(r"^[+-]?\d+(?:\.\d+)?$")
-SEGMENT_LENGTH_KEYS = {
-    "t_absorber_seg1",
-    "t_absorber_seg2",
-    "t_absorber_seg3",
-    "t_scin_seg1",
-    "t_scin_seg2",
-    "t_scin_seg3",
-}
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -43,7 +35,6 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--detector-type", help="Detector type filter")
     parser.add_argument("--write-json", help="Output JSON parameter path")
     parser.add_argument("--set", "-s", action="append", default=[], help="Parameter override key=value")
-    parser.add_argument("--dry-run", action="store_true", help="Print resolved parameters and exit")
     return parser.parse_args()
 
 
@@ -69,59 +60,14 @@ def set_detector_parameter(detector_element: xml_tree.Element, key_text: str, va
     new_parameter.set("name", key_text)
     new_parameter.set("value", value_text)
 
-
-# Hash the sorted parameter set to get a deterministic geometry ID.
-def compute_geometry_id(parameter_values: dict[str, str]) -> str:
-    digest_input = json.dumps(parameter_values, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha1(digest_input).hexdigest()[:8]
-
-
-# Convert bare numeric strings into JSON numbers.
-def convert_json_value(value_text: str) -> object:
-    value_text = value_text.strip()
-    if NUMERIC_PATTERN.match(value_text):
-        numeric_value = float(value_text)
-        if numeric_value.is_integer():
-            return int(numeric_value)
-        return numeric_value
-    return value_text
-
-
-# Keep sweep thickness inputs in centimeters and write explicit DD4hep unit expressions.
-def normalize_hcal_parameter_value(key_text: str, value_text: str) -> str:
-    stripped_value = value_text.strip()
-    if key_text in SEGMENT_LENGTH_KEYS and NUMERIC_PATTERN.match(stripped_value):
-        return f"{stripped_value}*cm"
-    return stripped_value
-
-
-def create_json_payload(parameter_values: dict[str, str], geometry_id: str) -> dict[str, object]:
-    # Build the JSON parameter payload that accompanies the generated XML.
-    payload: dict[str, object] = {"geometry_id": geometry_id}
-    for key_text, value_text in sorted(parameter_values.items()):
-        payload[key_text] = convert_json_value(normalize_hcal_parameter_value(key_text, value_text))
-    return payload
-
-
 def choose_output_paths(arguments: argparse.Namespace, geometry_id: str) -> tuple[Path, Path]:
     # Resolve the XML and JSON output paths for this geometry.
-    if arguments.out:
-        output_xml_path = resolve_project_path(arguments.out)
-        geometry_directory = output_xml_path.parent
-    else:
-        if arguments.outdir:
-            geometry_root_directory = resolve_project_path(arguments.outdir)
-        else:
-            geometry_root_directory = resolve_project_path(DEFAULT_OUTPUT_DIRECTORY)
-        geometry_directory = geometry_root_directory / geometry_id
-        output_xml_path = geometry_directory / "geometry.xml"
-
-    if arguments.write_json:
-        output_json_path = resolve_project_path(arguments.write_json)
-    else:
-        output_json_path = geometry_directory / "geometry.json"
-
-    return output_xml_path, output_json_path
+    return resolve_geometry_output_paths(
+        geometry_id,
+        out=arguments.out,
+        outdir=arguments.outdir,
+        write_json=arguments.write_json,
+    )
 
 
 def indent_xml(element: xml_tree.Element, level: int = 0) -> None:
@@ -198,13 +144,6 @@ def main() -> None:
         for key_text, value_text in sorted(parameter_values.items())
     )
     root_element.insert(0, xml_tree.Comment("\n" + "\n".join(comment_lines) + "\n"))
-
-    # Print the resolved outputs without writing files during dry runs.
-    if arguments.dry_run:
-        print("\n".join(comment_lines))
-        print(f"OutputXML: {to_project_relative_text(output_xml_path)}")
-        print(f"OutputJSON: {to_project_relative_text(output_parameter_path)}")
-        return
 
     # Write both generated outputs to disk.
     indent_xml(root_element)

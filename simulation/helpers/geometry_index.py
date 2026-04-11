@@ -3,9 +3,8 @@
 
 from __future__ import annotations
 
-import json
 import math
-import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
@@ -114,41 +113,27 @@ class GeometrySegmentRecipe:
     spacer_thickness_mm: float
 
 
-# Ask the sweep script what geometries a set of sweep specs would produce without building
-# any further metadata by hand in this helper.
-def inspect_geometry_rows(python_bin: str, spec_paths: Iterable[Path]) -> List[Dict[str, object]]:
-    """Ask the sweep script for the geometry rows implied by the requested specs."""
-    sweep_script = GEOMETRY_DIRECTORY / "sweep_geometries.py"
-    if not sweep_script.exists():
-        raise FileNotFoundError(f"{sweep_script} not found.")
-    command = [python_bin, str(sweep_script), "--dry-run"]
-    # Pass every requested spec to the sweep helper so the geometry list matches conductor.
+def inspect_geometry_rows(spec_paths: Iterable[Path]) -> List[Dict[str, object]]:
+    """Build the geometry rows implied by the requested specs."""
+    if str(GEOMETRY_DIRECTORY) not in sys.path:
+        sys.path.insert(0, str(GEOMETRY_DIRECTORY))
+
+    from sweep_geometries import build_geometry_rows, load_yaml_object
+
+    geometry_rows: List[Dict[str, object]] = []
     for spec_path in spec_paths:
-        command.extend(["--spec", str(spec_path)])
-    result = subprocess.run(
-        command,
-        cwd=PROJECT_DIRECTORY,
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    try:
-        geometry_rows = json.loads(result.stdout)
-    except json.JSONDecodeError as error:
-        raise RuntimeError("Failed to parse sweep_geometries.py dry-run output") from error
-    if not isinstance(geometry_rows, list):
-        raise RuntimeError("Expected sweep_geometries.py dry-run to return a JSON list")
+        specification = load_yaml_object(spec_path)
+        geometry_rows.extend(build_geometry_rows(specification, spec_path))
     return geometry_rows
 
 
-# Turn the dry-run sweep rows into strongly typed geometry records with validated paths.
+# Turn the planned sweep rows into strongly typed geometry records with validated paths.
 def load_geometry_variants(
     geometry_rows: Iterable[Dict[str, object]],
     *,
     require_geometry_files: bool,
 ) -> List[GeometryVariant]:
-    """Compile geometry metadata from dry-run sweep rows."""
+    """Compile geometry metadata from planned sweep rows."""
     geometry_variants: List[GeometryVariant] = []
     for geometry_row in geometry_rows:
         # Resolve the geometry file locations first so the later consistency checks compare

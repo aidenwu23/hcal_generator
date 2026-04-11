@@ -12,10 +12,13 @@ import xml.etree.ElementTree as xml_tree
 from pathlib import Path
 
 from geometry_utils import (
+    compute_geometry_id,
+    create_json_payload,
     DEFAULT_TEMPLATE_PATH,
     PROJECT_DIRECTORY,
     find_target_detector,
     read_detector_parameters,
+    resolve_geometry_output_paths,
     resolve_project_path,
     to_project_relative_text,
     validate_parameter_contract,
@@ -28,7 +31,6 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate geometry sweeps from YAML specifications")
     parser.add_argument("--spec", "-s", nargs="+", required=True, help="Sweep YAML file path(s)")
     parser.add_argument("--overwrite", action="store_true", help="Regenerate existing outputs")
-    parser.add_argument("--dry-run", action="store_true", help="Print planned geometry rows as JSON")
     return parser.parse_args()
 
 
@@ -83,14 +85,6 @@ def read_existing_geometry_id(parameter_json_path: Path) -> str:
     return str(geometry_id_value)
 
 
-def _extract_tagged_value(output: str, prefix: str) -> str:
-    # Pull one tagged value out of generate_hcal.py stdout.
-    for line in output.splitlines():
-        if line.strip().startswith(prefix):
-            return line.strip().split(":", 1)[1].strip()
-    return ""
-
-
 def run_generation_command(command: list[str]) -> str:
     # Run generate_hcal.py and return its combined stdout text.
     result = subprocess.run(
@@ -135,25 +129,14 @@ def build_generate_command(
     return command
 
 
-def inspect_geometry_generation(command: list[str]) -> dict[str, str]:
-    # Ask generate_hcal.py for the predicted geometry ID and output paths.
-    output_text = run_generation_command([*command, "--dry-run"])
-    geometry_id = _extract_tagged_value(output_text, "GeometryID:")
-    output_xml_path = _extract_tagged_value(output_text, "OutputXML:")
-    output_json_path = _extract_tagged_value(output_text, "OutputJSON:")
-    if not all([geometry_id, output_xml_path, output_json_path]):
-        raise RuntimeError("generate_hcal.py --dry-run did not report expected output paths")
-    return {
-        "geometry_id": geometry_id,
-        "xml_path": output_xml_path,
-        "json_path": output_json_path,
-    }
-
-
 def run_geometry_generation(command: list[str]) -> str:
     # Run the real geometry generation and read back the reported geometry ID.
     output_text = run_generation_command(command)
-    geometry_id = _extract_tagged_value(output_text, "GeometryID:")
+    geometry_id = ""
+    for line in output_text.splitlines():
+        if line.strip().startswith("GeometryID:"):
+            geometry_id = line.strip().split(":", 1)[1].strip()
+            break
     if not geometry_id:
         raise RuntimeError("generate_hcal.py did not report GeometryID")
     return geometry_id
@@ -230,21 +213,23 @@ def build_geometry_rows(specification: dict, sweep_spec_path: Path) -> list[dict
             detector_type=detector_type,
             geometry_parameters=geometry_parameters,
         )
-        generated_layout = inspect_geometry_generation(generation_command)
-        output_parameter_path = resolve_project_path(generated_layout["json_path"])
-        output_xml_path = resolve_project_path(generated_layout["xml_path"])
-        # Record the full geometry row for later dry-run output or real generation.
+        geometry_id = compute_geometry_id(geometry_parameters)
+        output_xml_path, output_parameter_path = resolve_geometry_output_paths(
+            geometry_id,
+            outdir=str(generated_output_directory),
+        )
+        # Record the full geometry row for later validation and real generation.
         geometry_rows.append(
             {
                 "spec_path": str(sweep_spec_path),
                 "index": variant_index,
                 "variant_name": variant_name,
                 "tag": geometry_tag,
-                "geometry_id": generated_layout["geometry_id"],
+                "geometry_id": geometry_id,
                 "geometry_directory": to_project_relative_text(output_xml_path.parent),
                 "json_path": to_project_relative_text(output_parameter_path),
                 "xml_path": to_project_relative_text(output_xml_path),
-                "parameters": geometry_parameters,
+                "parameters": create_json_payload(geometry_parameters, geometry_id),
                 "command": generation_command,
             }
         )
@@ -253,7 +238,6 @@ def build_geometry_rows(specification: dict, sweep_spec_path: Path) -> list[dict
 
 def main() -> None:
     arguments = parse_arguments()
-    all_geometry_rows: list[dict[str, object]] = []
 
     # Build all requested geometry rows, one sweep spec at a time.
     for sweep_spec_text in arguments.spec:
@@ -262,10 +246,6 @@ def main() -> None:
             raise FileNotFoundError(f"Sweep spec not found: {sweep_spec_path}")
         specification = load_yaml_object(sweep_spec_path)
         geometry_rows = build_geometry_rows(specification, sweep_spec_path)
-        all_geometry_rows.extend(geometry_rows)
-
-        if arguments.dry_run:
-            continue
 
         generated_count = 0
         # Generate each geometry unless the existing outputs are still valid.
@@ -295,11 +275,6 @@ def main() -> None:
             generated_count += 1
 
         print(f"Generated {generated_count} geometries for {sweep_spec_path}")
-
-    # Print the planned geometry rows instead of generating files during dry runs.
-    if arguments.dry_run:
-        printable_rows = [{k: v for k, v in row.items() if k != "command"} for row in all_geometry_rows]
-        print(json.dumps(printable_rows, indent=2))
 
 
 if __name__ == "__main__":

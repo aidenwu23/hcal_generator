@@ -86,7 +86,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--manifest-json", default=str(DATA_DIRECTORY / "manifests" / "run_manifest.json"), help="Path for JSON run manifest.")
     parser.add_argument("--manifest-csv", default=str(DATA_DIRECTORY / "manifests" / "run_manifest.csv"), help="Path for CSV run manifest.")
-    parser.add_argument("--dry-run", action="store_true", help="Print actions without executing external commands.")
     parser.add_argument("--overwrite", action="store_true", help="Re-run even if outputs already exist.")
     parser.add_argument(
         "--delete-intermediates",
@@ -129,11 +128,10 @@ def main() -> None:
     maybe_run_sweeps(args, spec_paths)
 
     # Load the geometry variants.
-    geometry_rows = inspect_geometry_rows(args.python, spec_paths)
-    require_geometry_files = not args.dry_run
+    geometry_rows = inspect_geometry_rows(spec_paths)
     geometry_variants = load_geometry_variants(
         geometry_rows,
-        require_geometry_files=require_geometry_files,
+        require_geometry_files=True,
     )
     if not geometry_variants:
         print("No geometry variants found; nothing to do.")

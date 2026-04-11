@@ -31,9 +31,6 @@ def maybe_remove_file(args: argparse.Namespace, path: Path) -> None:
     # Remove one intermediate file after every downstream consumer has finished.
     if not args.delete_intermediates:
         return
-    if args.dry_run:
-        print(f"[delete_intermediates] remove {path}")
-        return
     if not path.exists():
         return
     path.unlink()
@@ -41,11 +38,9 @@ def maybe_remove_file(args: argparse.Namespace, path: Path) -> None:
 
 
 # Print and execute one external command so the orchestration logs show exactly what ran.
-def run_cmd(command: Sequence[str], *, dry_run: bool, label: str) -> subprocess.CompletedProcess:
+def run_cmd(command: Sequence[str], *, label: str) -> subprocess.CompletedProcess:
     """Execute a subprocess, emitting the command for easier debugging."""
     print(f"[{label}] {' '.join(shlex.quote(token) for token in command)}")
-    if dry_run:
-        return subprocess.CompletedProcess(command, returncode=0)
     return subprocess.run(command, check=True)
 
 
@@ -80,7 +75,7 @@ def maybe_run_sweeps(args: argparse.Namespace, spec_paths: List[Path]) -> None:
         ]
         if args.overwrite_geos:
             command.append("--overwrite")
-        run_cmd(command, dry_run=args.dry_run, label="sweep")
+        run_cmd(command, label="sweep")
 
 
 def write_scaled_mip_calibration(
@@ -136,10 +131,6 @@ def write_scaled_mip_calibration(
         "thresholds": thresholds,
     }
 
-    if args.dry_run:
-        print(f"[mip_calibration] write {calibration_path}")
-        return calibration_path
-
     with calibration_path.open("w", encoding="utf-8") as calibration_file:
         json.dump(payload, calibration_file, indent=2)
         calibration_file.write("\n")
@@ -191,11 +182,8 @@ def run_ddsim(args: argparse.Namespace, run_plan: RunPlan) -> float:
             spec,
             event_count=run_plan.n_events,
         )
-        if args.dry_run:
-            print(f"[gps_macro] write {run_plan.macro_path}")
-        else:
-            with run_plan.macro_path.open("w", encoding="utf-8") as macro_file:
-                macro_file.write(macro_text)
+        with run_plan.macro_path.open("w", encoding="utf-8") as macro_file:
+            macro_file.write(macro_text)
         command.extend(
             [
                 "--runType",
@@ -229,7 +217,7 @@ def run_ddsim(args: argparse.Namespace, run_plan: RunPlan) -> float:
     if run_plan.seed is not None:
         command.extend(["--random.seed", str(run_plan.seed)])
     start = time.time()
-    run_cmd(command, dry_run=args.dry_run, label="ddsim")
+    run_cmd(command, label="ddsim")
     return time.time() - start
 
 
@@ -254,7 +242,7 @@ def run_process(
     if run_plan.expected_pdg is not None:
         command.extend(["--expected-pdg", str(run_plan.expected_pdg)])
     start = time.time()
-    run_cmd(command, dry_run=args.dry_run, label="process")
+    run_cmd(command, label="process")
     return time.time() - start
 
 
@@ -279,10 +267,6 @@ def write_metadata(
         payload["macro_path"] = str(run_plan.macro_path)
     start = time.time()
 
-    # In dry-run mode report the intended output path without creating files.
-    if args.dry_run:
-        print(f"[meta] write {run_plan.meta_path}")
-        return time.time() - start
     ensure_dir(run_plan.meta_path.parent)
     with run_plan.meta_path.open("w", encoding="utf-8") as metadata_file:
         json.dump(payload, metadata_file, indent=2)
@@ -303,7 +287,7 @@ def run_performance_analysis(args: argparse.Namespace, run_plan: RunPlan) -> flo
         f'{performance_macro_path}("{run_plan.events_path}","{run_plan.meta_path}","{run_plan.calibration_path}","{run_plan.performance_path}")',
     ]
     start = time.time()
-    run_cmd(command, dry_run=args.dry_run, label="performance")
+    run_cmd(command, label="performance")
     return time.time() - start
 
 

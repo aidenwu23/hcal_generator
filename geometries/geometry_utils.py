@@ -3,12 +3,25 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 import xml.etree.ElementTree as xml_tree
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 PROJECT_DIRECTORY = Path(__file__).resolve().parents[1]
 DEFAULT_TEMPLATE_PATH = "geometries/templates/hcal_template.xml"
+DEFAULT_OUTPUT_DIRECTORY = "geometries/generated"
+NUMERIC_PATTERN = re.compile(r"^[+-]?\d+(?:\.\d+)?$")
+SEGMENT_LENGTH_KEYS = {
+    "t_absorber_seg1",
+    "t_absorber_seg2",
+    "t_absorber_seg3",
+    "t_scin_seg1",
+    "t_scin_seg2",
+    "t_scin_seg3",
+}
 
 
 def resolve_project_path(path_text: str) -> Path:
@@ -67,6 +80,58 @@ def read_detector_parameters(detector_element: xml_tree.Element) -> Dict[str, st
             continue
         parameter_values[key_text] = value_text
     return parameter_values
+
+
+def compute_geometry_id(parameter_values: Dict[str, str]) -> str:
+    digest_input = json.dumps(parameter_values, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha1(digest_input).hexdigest()[:8]
+
+
+def normalize_hcal_parameter_value(key_text: str, value_text: str) -> str:
+    stripped_value = value_text.strip()
+    if key_text in SEGMENT_LENGTH_KEYS and NUMERIC_PATTERN.match(stripped_value):
+        return f"{stripped_value}*cm"
+    return stripped_value
+
+
+def convert_json_value(value_text: str) -> object:
+    stripped_value = value_text.strip()
+    if NUMERIC_PATTERN.match(stripped_value):
+        numeric_value = float(stripped_value)
+        if numeric_value.is_integer():
+            return int(numeric_value)
+        return numeric_value
+    return stripped_value
+
+
+def create_json_payload(parameter_values: Dict[str, str], geometry_id: str) -> Dict[str, object]:
+    payload: Dict[str, object] = {"geometry_id": geometry_id}
+    for key_text, value_text in sorted(parameter_values.items()):
+        payload[key_text] = convert_json_value(normalize_hcal_parameter_value(key_text, value_text))
+    return payload
+
+
+def resolve_geometry_output_paths(
+    geometry_id: str,
+    *,
+    out: Optional[str] = None,
+    outdir: Optional[str] = None,
+    write_json: Optional[str] = None,
+) -> Tuple[Path, Path]:
+    if out:
+        output_xml_path = resolve_project_path(out)
+        geometry_directory = output_xml_path.parent
+    else:
+        geometry_root_directory = resolve_project_path(outdir or DEFAULT_OUTPUT_DIRECTORY)
+        geometry_directory = geometry_root_directory / geometry_id
+        output_xml_path = geometry_directory / "geometry.xml"
+
+    if write_json:
+        output_json_path = resolve_project_path(write_json)
+    else:
+        output_json_path = geometry_directory / "geometry.json"
+
+    return output_xml_path, output_json_path
 
 
 def parse_int_value(value_text: str, key_text: str) -> int:

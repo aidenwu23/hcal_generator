@@ -14,7 +14,6 @@ python3 simulation/calibration/calibrate_MIP.py \
 from __future__ import annotations
 
 import argparse
-import json
 import shlex
 import subprocess
 import sys
@@ -25,7 +24,7 @@ PROJECT_DIRECTORY = Path(__file__).resolve().parents[2]
 if str(PROJECT_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIRECTORY))
 
-from simulation.helpers.geometry_index import load_geometry_variants
+from simulation.helpers.geometry_index import inspect_geometry_rows, load_geometry_variants
 from simulation.helpers.run_steps import maybe_run_sweeps
 
 CALIBRATION_MACRO_PATH = PROJECT_DIRECTORY / "simulation" / "calibration" / "calibrate_MIP.C"
@@ -75,16 +74,7 @@ def resolve_first_geometry_xml(arguments: argparse.Namespace) -> Path:
 
     maybe_run_sweeps(arguments, [spec_path])
 
-    geometry_rows = json.loads(
-        subprocess.run(
-            [arguments.python, str(PROJECT_DIRECTORY / "geometries" / "sweep_geometries.py"), "--dry-run", "--spec", str(spec_path)],
-            cwd=PROJECT_DIRECTORY,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        ).stdout
-    )
+    geometry_rows = inspect_geometry_rows([spec_path])
     geometry_variants = load_geometry_variants(geometry_rows, require_geometry_files=True)
     if not geometry_variants:
         raise ValueError(f"No geometry variants found in {spec_path}")
@@ -93,8 +83,6 @@ def resolve_first_geometry_xml(arguments: argparse.Namespace) -> Path:
 
 def main() -> int:
     arguments = parse_arguments()
-    arguments.dry_run = False
-
     raw_output_path = Path(arguments.raw_out).expanduser().resolve()
     json_output_path = Path(arguments.json_out).expanduser().resolve()
     plots_output_path = Path(arguments.plots_out).expanduser().resolve() if arguments.plots_out else None
