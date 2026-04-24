@@ -1,0 +1,16 @@
+\section{Summary}\label{sec:summary}
+
+\noindent This study tested whether low-energy neutron detection in the ePIC nHCal can be improved within a geometry whose total depth remains in a comparable range by redistributing absorber and scintillator 
+thickness across three longitudinal segments. Geometries were evaluated with DD4hep/DDsim using a neutron G4GPS beam specification over a continuous momentum range of 0.1--2.5 GeV/c, 
+and ranked with a surrogate-guided optimization loop.
+
+\noindent The optimization landscape was found to be shallow. The final optimum was already present in the initial 150-point Latin-hypercube scan. Later Bayesian-optimization proposals 
+produced geometries with similar performance, but they did not consistently outperform the best initial geometry after higher-stat confirmation runs.
+
+\noindent Relative to the baseline nHCal geometry, the optimum improved the neutron detection efficiency from $0.53172 \pm 0.00331$ to $0.54184 \pm 0.00276$. Over the same comparison, 
+the average fired-tile count increased from $1.09068 \pm 0.00897$ to $1.13452 \pm 0.00660$, and the average fired-layer count increased from $0.97710 \pm 0.00786$ to $1.01348 \pm 0.00553$. This corresponds to a modest efficiency 
+gain of about $2\%$ relative, with somewhat larger increases in the shower-activity metrics.
+
+\noindent Higher-stat reruns were important for interpretation. Several geometries that appeared competitive in the initial lower-stat scan did not remain leaders once they were 
+reevaluated with more events. This suggests that the staged event-count strategy was sufficient to identify the relevant region of parameter space, but not always sufficient to 
+rank the best few candidates cleanly without follow-up confirmation.

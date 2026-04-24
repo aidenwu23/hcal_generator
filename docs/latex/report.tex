@@ -1,0 +1,246 @@
+\section{Analysis details}\label{sec:report}
+\noindent This section summarizes the simulation, reconstruction, optimization, and comparison steps used in this study.
+
+\subsection{Data and Monte Carlo Samples}
+
+\noindent This study used simulated neutron events in the ePIC backward/negative hadronic calorimeter (nHCal). No collision data were used. Geometry descriptions 
+were generated from a parameterized DD4hep compact XML template in which the calorimeter was modeled as a 10-layer sampling detector with a 3/3/4 longitudinal segmentation 
+pattern. The transverse detector area was fixed to $1\,\mathrm{m}\times1\,\mathrm{m}$ with $10\,\mathrm{cm}\times10\,\mathrm{cm}$ readout cells.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.55\linewidth]{plots/detector_segmentation_sketch.png}
+    \caption[Detector segmentation sketch]{\it Detector sketch showing the three longitudinal segments, the absorber/scintillator parameterization, and the neutron beam direction used in the study.}
+    \label{fig:nhcal_segmentation}
+\end{figure}
+
+\noindent The detector response was simulated with DD4hep/DDsim 1.36.0, Geant4 11.4.1, and ROOT 6.38.04\cite{Frank:2018dd4hep,Agostinelli:2003geant4,Allison:2006geant4,Allison:2016geant4,Brun:1997root}. 
+The beam configuration used a neutron G4GPS source spanning a continuous momentum range of $0.1$--$2.5~\mathrm{GeV}/c$. The source spectrum was provided as a tabulated user 
+histogram whose points approximate an exponential falloff, with linear interpolation between points performed by G4GPS.
+
+\noindent The reference geometry was the uniform nHCal baseline, in which each longitudinal segment uses the same absorber and scintillator thicknesses. Alternative geometries 
+were defined by allowing the absorber and scintillator thickness to vary independently in each of the three longitudinal segments while keeping the total detector depth in a 
+comparable range. The initial exploration used a 150-point Latin-hypercube sample with 5000 simulated events per geometry. These values were chosen as a practical compromise 
+between design-space coverage and simulation cost for the first pass. Selected leading candidates were later rerun with 20000 events to reduce statistical fluctuations in the 
+top-ranked region while keeping the higher-stat confirmation stage computationally manageable.
+
+\subsection{Event, Particle and PID Selections}
+
+\noindent Only neutron gun events were used in this study. The generated momentum spectrum was fixed by the G4GPS configuration described above. No track-based reconstruction 
+or particle-identification selection was applied, since the study focused on calorimeter hit activity from single-particle simulation.
+
+\noindent At the event-processing stage, an event was counted as valid if the recorded Monte Carlo energy was positive. The main performance metric, detection efficiency, was then defined as
+\[
+\epsilon_{\mathrm{det}}=\frac{N_{\mathrm{detected}}}{N_{\mathrm{valid}}}.
+\]
+An event was counted as detected if at least one calorimeter cell passed threshold anywhere in the detector. In addition to detection efficiency, two shower-activity observables 
+were recorded: the average number of fired tiles per valid event and the average number of fired layers per valid event.
+
+\subsection{Signal Extraction}
+
+\noindent The hit-level signal extraction was based on energy deposits in the scintillator cells. A cell was counted as fired if its deposited energy exceeded the threshold 
+assigned to the corresponding longitudinal segment. A layer was counted as fired if at least one cell in that layer fired. For each processed run, the event loop produced the 
+detected-event count, detection efficiency, average fired-tile multiplicity, and average fired-layer multiplicity.
+
+\noindent Thresholds were derived from a MIP-based calibration step. A separate muon calibration script was used to extract a reference MIP scale from the baseline geometry. 
+The calibration used 10000 muon events and pooled energy deposits by layer and segment. Segment-specific thresholds for a given geometry were then obtained by linearly scaling the 
+reference MIP value and multiplying by the chosen MIP fraction parameter, assuming an approximately linear dependence on scintillator thickness. In the optimization runs reported here, the threshold 
+setting used a MIP fraction of 0.5. This MIP-based thresholding approach follows the same general calibration logic used in internal nHCal studies\cite{Kosarzewski:2025nhcalstatus}.
+
+\subsection{Corrections for Detector Effects}
+
+\noindent No detector-level correction procedure was applied in this study. The comparison was entirely geometry-to-geometry at the detector-response level 
+under a fixed simulation and thresholding workflow. It is important to note that this study is a relatively idealized simulation study. Because the same beam configuration, 
+detector template, threshold definition, and event-processing logic were used for both the baseline and all candidate geometries, the comparison is intended as a controlled 
+relative benchmark rather than a fully corrected absolute detector-performance measurement.
+
+\subsection{Surrogate Model and Bayesian Optimization}
+
+\noindent The optimization stage used a surrogate-guided loop. Processed run outputs were converted into a run-level CSV and then compacted to one row per geometry. The compact 
+dataset contained the geometry parameters together with the neutron detection efficiency, average fired-tile count, and average fired-layer count. These observables were then used 
+to train a regression model that proposed additional candidate geometries for simulation. Candidate ranking used a normalized weighted score built from efficiency, fired-layer 
+multiplicity, and fired-tile multiplicity, with the baseline geometry used as the zero-point anchor and the 90th percentile of the initial Latin-hypercube sample used as the reference scale.
+
+\noindent The surrogate model was trained on a per-geometry CSV file. Each row in the CSV corresponds to one geometry and contains the 
+geometry parameters together with averaged performance metrics. The surrogate input features were:
+\begin{itemize}[nosep]
+    \item absorber thicknesses in segments 1, 2, and 3
+    \item scintillator thicknesses in segments 1, 2, and 3
+\end{itemize}
+The target variables were:
+\begin{itemize}[nosep]
+    \item neutron detection efficiency
+    \item average fired-tile count
+    \item average fired-layer count
+\end{itemize}
+
+\noindent The regression model was implemented with LightGBM\cite{Ke:2017lightgbm}. Because multiple target observables were predicted simultaneously, the code wrapped the base LightGBM regressor in a 
+multi-output regression interface. The current configuration used 500 estimators, a learning rate of 0.05, 31 leaves, and 0.8 subsampling in both events and features. By default, 
+20\% of the compact dataset was held out for validation, and mean absolute percentage error was printed separately for each predicted target, consistently within 2\% for each target. These 
+hyperparameters were fixed settings and were not separately tuned in this study.
+
+\noindent Candidate generation for later iterations was handled by quasi-random sampling in the allowed design space. The active workflow sampled a pool of 20000 candidates per 
+iteration and generated 5 proposed geometries per Bayesian-optimization (BO) batch. Design constraints were applied first in geometry space, after which the sampled candidates were converted into surrogate 
+feature rows and scored with the trained model. The pool size and the batch size were chosen as a practical balance between broad surrogate-guided exploration and downstream simulation 
+throughput.
+
+\noindent The surrogate ranking used the normalized weighted score implemented in the scoring helper. The three predicted metrics were neutron detection efficiency, average 
+fired-layer count, and average fired-tile count, with weights of 0.5, 0.3, and 0.2, respectively. For each metric, the normalization used the baseline geometry as the zero-point 
+anchor and the 90th percentile of the initial Latin-hypercube sample as the reference scale. Values below baseline received no credit. Values between the baseline and the 
+90th percentile were scaled linearly. These weights intentionally prioritized neutron detection efficiency as the primary objective, while the larger secondary weight on fired-layer multiplicity 
+was meant to give extra preference to longitudinal shower development in a study focused on longitudinal segmentation. The smaller fired-tile weight was retained as a weaker measure of overall shower activity. The 90th-percentile anchor was used to reduce sensitivity to the noisiest upper tail of the initial scan. Values above the 90th percentile were allowed to continue increasing 
+with a reduced slope of 0.2, so that the top end of the score did not saturate immediately while still remaining less sensitive to extreme fluctuations. Candidate selection within a BO batch 
+also enforced a minimum normalized geometry-space separation of 0.05 between chosen proposals, again as a practical diversity setting rather than a separately optimized parameter.
+
+\noindent The overall workflow was iterative. After a sweep was simulated and processed, the processed outputs were compacted to one row per geometry, and used to retrain 
+the surrogate model by appending it onto the CSV from the previous iteration. The updated model was then used to generate the next BO sweep. In parallel with this loop, 
+the compact CSV was also rescored directly to identify the current best observed geometry under the same objective used for candidate ranking.
+
+\subsection{Systematic Uncertainties}
+
+\noindent This note did not perform a full detector-systematics study. The dominant uncertainty considered here was Monte Carlo statistical variation between geometry evaluations. 
+This was especially important because the efficiency landscape across the scanned geometries was shallow. In the initial 150-point scan, neutron detection efficiencies covered only 
+a narrow range, approximately 0.51 to 0.55. This overall efficiency scale is broadly consistent with internal nHCal performance estimates\cite{BrandenburgRiedl:2025nhcalpdr}. Under those conditions, low-statistics evaluations can mis-rank near-top candidates even when the broader landscape is still identified correctly.
+
+\noindent To address this, the study used a staged event-count strategy. The initial Latin-hypercube scan used 5000 events per geometry to map the design space at manageable cost. 
+Top-performing candidates were then rerun with 20000 events to test whether their apparent advantage persisted at higher statistics. Several geometries that looked competitive in 
+the lower-stat scan did not remain leaders after these higher-stat confirmation runs. This behavior should be treated as a limitation of the initial low-stat ranking for near-tied 
+candidates, but not as evidence that the initial scan failed to identify the relevant performance region.
+
+\noindent For the final baseline-versus-optimum comparison, both the baseline geometry and the optimum were evaluated with ten 5000-event runs each. This provides matched repeated-run 
+estimates for the main observables and their standard errors on the mean. A broader treatment of systematic variations, such as alternative threshold settings, physics lists, 
+or beam-shape variations, is outside the scope of the present note. The number of repeated runs was chosen as a computationally affordable way to estimate run-to-run variation in the final matched comparison.
+
+\subsection{Results}
+
+\noindent The optimization landscape was found to be shallow. The best-performing geometry was already present in the initial 150-point Latin-hypercube sample. 
+Later Bayesian-optimization proposals produced candidates with comparable performance, but they did not consistently outperform this geometry once higher-stat reruns were 
+used to check the leaders.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[t]{0.48\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{plots/efficiency_hist.png}
+        \caption[Efficiency landscape]{\it Histogram of neutron detection efficiencies across the initial 150-geometry scan.}
+        \label{fig:efficiency_histogram}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{plots/sorted_efficiency.png}
+        \caption[Sorted efficiency scan]{\it Sorted neutron detection efficiencies from the initial 150-geometry scan, with the baseline shown for comparison.}
+        \label{fig:sorted_efficiency_scan}
+    \end{subfigure}
+\end{figure}
+
+\noindent Figures~\ref{fig:efficiency_histogram} and \ref{fig:sorted_efficiency_scan} provide complementary views of the same shallow landscape. The histogram shows that the scanned geometries occupy only a narrow efficiency range, while the ranked plot shows that many geometries remain close in performance and that the baseline lies within the broader spread of the sampled designs.
+
+\noindent The final matched comparison used the uniform baseline geometry and the optimum, each evaluated in ten independent 5000-event runs. The quoted uncertainties in this 
+paragraph are standard errors on the mean. The baseline achieved a neutron detection efficiency of $0.53172 \pm 0.00331$, while the optimum achieved $0.54184 \pm 0.00276$, 
+corresponding to an absolute gain of 0.01012 and a relative gain of about 2\%. Over the same comparison, the average fired-tile multiplicity increased from $1.09068 \pm 0.00897$ 
+to $1.13452 \pm 0.00660$, and the average fired-layer multiplicity increased from $0.97710 \pm 0.00786$ to $1.01348 \pm 0.00553$. These correspond to increases of about 4.4\% and 4.1\%, 
+respectively.
+
+\noindent Tables~\ref{tab:baseline_geometry}--\ref{tab:rerun_b_geometry} summarize the baseline, the optimum, and the next two best-performing geometries among the higher-stat reruns. All thickness values are given in cm.
+
+\begin{center}
+    \begin{minipage}[t]{0.47\textwidth}
+        \centering
+        \begin{tabular}{lc}
+            \toprule
+            Metric & Value \\
+            \midrule
+            $t_{\mathrm{abs},1}$ & 4.0000 \\
+            $t_{\mathrm{scin},1}$ & 0.4000 \\
+            $t_{\mathrm{abs},2}$ & 4.0000 \\
+            $t_{\mathrm{scin},2}$ & 0.4000 \\
+            $t_{\mathrm{abs},3}$ & 4.0000 \\
+            $t_{\mathrm{scin},3}$ & 0.4000 \\
+            Efficiency & $0.53172 \pm 0.00331$ \\
+            Tiles Mean & $1.09068 \pm 0.00897$ \\
+            Layers Mean & $0.97710 \pm 0.00786$ \\
+            \bottomrule
+        \end{tabular}
+        \captionof{table}[Baseline geometry]{\it Baseline geometry.}
+        \label{tab:baseline_geometry}
+    \end{minipage}
+    \hfill
+    \begin{minipage}[t]{0.47\textwidth}
+        \centering
+        \begin{tabular}{lc}
+            \toprule
+            Metric & Value \\
+            \midrule
+            $t_{\mathrm{abs},1}$ & 3.6138 \\
+            $t_{\mathrm{scin},1}$ & 0.5121 \\
+            $t_{\mathrm{abs},2}$ & 3.6732 \\
+            $t_{\mathrm{scin},2}$ & 0.4663 \\
+            $t_{\mathrm{abs},3}$ & 4.0268 \\
+            $t_{\mathrm{scin},3}$ & 0.4801 \\
+            Efficiency & $0.54184 \pm 0.00276$ \\
+            Tiles Mean & $1.13452 \pm 0.00660$ \\
+            Layers Mean & $1.01348 \pm 0.00553$ \\
+            \bottomrule
+        \end{tabular}
+        \captionof{table}[Optimum geometry]{\it Optimum geometry.}
+        \label{tab:optimum_geometry}
+    \end{minipage}
+
+    \vspace{0.75cm}
+
+    \begin{minipage}[t]{0.47\textwidth}
+        \centering
+        \begin{tabular}{lc}
+            \toprule
+            Metric & Value \\
+            \midrule
+            $t_{\mathrm{abs},1}$ & 3.6043 \\
+            $t_{\mathrm{scin},1}$ & 0.5100 \\
+            $t_{\mathrm{abs},2}$ & 3.6071 \\
+            $t_{\mathrm{scin},2}$ & 0.3395 \\
+            $t_{\mathrm{abs},3}$ & 3.5849 \\
+            $t_{\mathrm{scin},3}$ & 0.3072 \\
+            Efficiency & 0.53705 \\
+            Tiles Mean & 1.14130 \\
+            Layers Mean & 1.02010 \\
+            \bottomrule
+        \end{tabular}
+        \captionof{table}[High-stat candidate A]{\it First higher-stat comparison candidate.}
+        \label{tab:rerun_a_geometry}
+    \end{minipage}
+    \hfill
+    \begin{minipage}[t]{0.47\textwidth}
+        \centering
+        \begin{tabular}{lc}
+            \toprule
+            Metric & Value \\
+            \midrule
+            $t_{\mathrm{abs},1}$ & 3.5150 \\
+            $t_{\mathrm{scin},1}$ & 0.5771 \\
+            $t_{\mathrm{abs},2}$ & 3.5268 \\
+            $t_{\mathrm{scin},2}$ & 0.4571 \\
+            $t_{\mathrm{abs},3}$ & 4.0344 \\
+            $t_{\mathrm{scin},3}$ & 0.4120 \\
+            Efficiency & 0.53670 \\
+            Tiles Mean & 1.14450 \\
+            Layers Mean & 1.02065 \\
+            \bottomrule
+        \end{tabular}
+        \captionof{table}[High-stat candidate B]{\it Second higher-stat comparison candidate.}
+        \label{tab:rerun_b_geometry}
+    \end{minipage}
+\end{center}
+
+
+\subsection{Summary and Conclusion}
+
+\noindent This study optimized the absorber and scintillator thicknesses in a simplified 10-layer, three-segment model of the ePIC nHCal using simulated neutron events. The optimization used a surrogate-guided workflow trained on DD4hep/DDsim and Geant4 detector-response outputs, with candidate geometries ranked by a weighted combination of neutron detection efficiency, fired-layer multiplicity, and fired-tile multiplicity.
+
+\noindent The best geometry improved the neutron detection efficiency from $0.53172 \pm 0.00331$ for the uniform baseline to $0.54184 \pm 0.00276$, corresponding to a relative gain of about 2\%. The same comparison showed increases of about 4\% in both fired-tile and fired-layer multiplicities. These results suggest that nonuniform longitudinal segmentation can provide a modest improvement in low-energy neutron response.
+
+\noindent The observed efficiency landscape was shallow, and several near-leading candidates changed rank after higher-statistics reruns. The result should therefore be interpreted as a controlled simulation indication rather than a final detector-design recommendation. Further confirmation with larger event samples, threshold variations, and more realistic detector and beam conditions would be needed before drawing stronger design conclusions.
+
+\subsection{Discussion}
+
+\noindent The efficiency gain is modest. However, the improvement is supported by matched repeated-run statistics, and the multiplicity observables show a clearer separation between the baseline and the optimum. The study therefore suggests that nonuniform longitudinal redistribution can improve low-energy neutron response in the ePIC nHCal, but only within a fairly shallow performance landscape. In this setting, the surrogate-guided workflow was useful for reducing the search burden and identifying promising regions, but higher-stat confirmation remained necessary to distinguish the best few candidates reliably.

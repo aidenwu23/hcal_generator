@@ -1,0 +1,19 @@
+\section{Introduction}\label{sec:introduction}
+
+\noindent Hadronic calorimeters are typically designed around a limited set of geometric and material constraints, so the question is often not whether the detector 
+can be made arbitrarily larger, but whether the available depth can be used more effectively. In that setting, a natural detector-optimization question is whether 
+low-energy neutron detection can be improved by redistributing absorber and scintillator thickness along the longitudinal direction, rather than keeping the calorimeter 
+uniform layer by layer.
+
+\noindent This note studies that question for the ePIC negative eta hadronic calorimeter (nHCal). The reference geometry is a uniform 10-layer sampling calorimeter 
+with identical absorber and scintillator thickness in every segment. The alternative explored here is a nonuniform longitudinal parameterization in which the calorimeter 
+is divided into three segments, each with its own absorber and scintillator thickness. This keeps the study close to a realistic detector-design problem: the overall depth 
+remains in a comparable range, while the internal material distribution is allowed to vary.
+
+\noindent Because the parameter space is continuous and multi-dimensional, a brute-force scan is inefficient. The optimization is instead approached with a 
+surrogate-guided workflow: simulated detector responses are used to train a regression model, and that model is then used to guide subsequent geometry proposals.
+
+\noindent This surrogate-based approach is useful only if the geometry response contains enough structure to distinguish genuinely better configurations from statistical 
+fluctuations. For that reason, the study is framed not only as a detector-optimization problem, but also as a test of whether a practical machine-learning workflow can 
+resolve meaningful performance differences in a relatively shallow calorimeter-design landscape. The main comparison throughout the note is therefore between the uniform 
+nHCal baseline and the best-performing nonuniform geometries identified by the optimization procedure.
