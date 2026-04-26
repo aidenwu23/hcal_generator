@@ -43,9 +43,20 @@ constraints:
   predicted: []
 
 scoring:
-  mode: metric
-  metric: neutron_efficiency
+  mode: normalized_weighted
   maximize: true
+  normalization:
+    baseline_csv: surrogate/campaigns/0.1-2.5_GeV/attempt_2/baseline/baseline_compact.csv
+    reference_csv: surrogate/campaigns/0.1-2.5_GeV/attempt_2/iteration_0/training_compact_0.csv
+    baseline_geometry_id: 04e3fdfb
+    percentile: 0.9
+  metrics:
+    - column: neutron_efficiency
+      weight: 0.5
+    - column: neutron_layers_mean
+      weight: 0.3
+    - column: neutron_tiles_mean
+      weight: 0.2
 
 diversity:
   min_l2_norm: 0.05

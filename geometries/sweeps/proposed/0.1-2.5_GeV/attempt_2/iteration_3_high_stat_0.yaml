@@ -1,0 +1,60 @@
+name: iteration_3_high_stat
+tag_prefix: confirm
+template: geometries/templates/hcal_template.xml
+detector_type: hcal
+index_base: 0
+outdir_generated: geometries/generated
+constants:
+  side: -z
+  dx: 100/2*cm
+  dy: 100/2*cm
+  zmin: 0.20*m
+  nLayers: 10
+  t_spacer: 0.05*cm
+  spacerMaterial: Air
+  seg1_layers: 3
+  seg2_layers: 3
+  seg3_layers: 4
+variants:
+- tag: 010fa737
+  t_absorber_seg1: 3.6043
+  t_absorber_seg2: 3.6071
+  t_absorber_seg3: 3.5849
+  t_scin_seg1: 0.51
+  t_scin_seg2: 0.3395
+  t_scin_seg3: 0.3072
+- tag: bf2ed367
+  t_absorber_seg1: 3.515
+  t_absorber_seg2: 3.5268
+  t_absorber_seg3: 4.0344
+  t_scin_seg1: 0.5771
+  t_scin_seg2: 0.4571
+  t_scin_seg3: 0.412
+- tag: 69d313b0
+  t_absorber_seg1: 4.0216
+  t_absorber_seg2: 3.6619
+  t_absorber_seg3: 3.7807
+  t_scin_seg1: 0.561
+  t_scin_seg2: 0.3094
+  t_scin_seg3: 0.3055
+- tag: 0626e538
+  t_absorber_seg1: 3.7203
+  t_absorber_seg2: 4.0283
+  t_absorber_seg3: 3.9831
+  t_scin_seg1: 0.4751
+  t_scin_seg2: 0.397
+  t_scin_seg3: 0.4184
+- tag: 1fa19adc
+  t_absorber_seg1: 3.6138
+  t_absorber_seg2: 3.6732
+  t_absorber_seg3: 4.0268
+  t_scin_seg1: 0.5121
+  t_scin_seg2: 0.4663
+  t_scin_seg3: 0.4801
+- tag: b8fe830a
+  t_absorber_seg1: 4.3764
+  t_absorber_seg2: 3.5359
+  t_absorber_seg3: 4.0962
+  t_scin_seg1: 0.4528
+  t_scin_seg2: 0.3852
+  t_scin_seg3: 0.342

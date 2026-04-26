@@ -1,0 +1,25 @@
+name: c00d8bb9
+tag_prefix: c00d8bb9
+template: geometries/templates/hcal_template.xml
+detector_type: hcal
+index_base: 0
+outdir_generated: geometries/generated
+constants:
+  side: -z
+  dx: 100/2*cm
+  dy: 100/2*cm
+  zmin: 0.20*m
+  nLayers: 10
+  t_spacer: 0.05*cm
+  spacerMaterial: Air
+  seg1_layers: 3
+  seg2_layers: 3
+  seg3_layers: 4
+variants:
+- tag: c00d8bb9
+  t_absorber_seg1: 3.9506
+  t_absorber_seg2: 3.5637
+  t_absorber_seg3: 4.3562
+  t_scin_seg1: 0.5823
+  t_scin_seg2: 0.4202
+  t_scin_seg3: 0.4172

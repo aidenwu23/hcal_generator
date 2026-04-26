@@ -25,13 +25,14 @@ Reference: https://lists.bnl.gov/sympa/arc/epic-backward-hcal-l/2025-02/msg00006
 
 namespace {
 
-constexpr int kLayerCount = 10;
-constexpr int kLayerBitOffset = 8;
-constexpr std::uint64_t kLayerMask = 0xFF;
-constexpr double kWindowTimeMinNs = 0.0;
-constexpr double kWindowTimeMaxNs = 100.0;
+constexpr int kLayerCount = 10;  // Number of nHCal layers in the compact template.
+constexpr int kLayerBitOffset = 8;  // DD4hep cellID bit offset used for the layer field.
+constexpr std::uint64_t kLayerMask = 0xFF;  // Eight-bit layer field mask.
+constexpr double kWindowTimeMinNs = 0.0;  // Start of prompt integration window in ns.
+constexpr double kWindowTimeMaxNs = 100.0;  // End of prompt integration window in ns.
 
 int decode_layer_index(std::uint64_t cell_id) {
+  // Extract the layer index from the encoded calorimeter cell ID.
   return static_cast<int>((cell_id >> kLayerBitOffset) & kLayerMask);
 }
 
@@ -52,15 +53,19 @@ double integrated_hit_energy_in_window(const edm4hep::SimCalorimeterHit& hit) {
 }  // namespace
 
 static bool hasArg(int argc, char** argv, const std::string& key) {
+  // Check whether a command-line flag is present.
   for (int i = 1; i < argc; ++i) if (key == argv[i]) return true; return false;
 }
 static std::string getArg(int argc, char** argv, const std::string& key, const std::string& def="") {
+  // Read the value following a command-line option.
   for (int i = 1; i < argc - 1; ++i) if (key == argv[i]) return std::string(argv[i+1]); return def;
 }
 static int getArgI(int argc, char** argv, const std::string& key, int def) {
+  // Read an integer command-line option.
   const auto s = getArg(argc, argv, key, ""); return s.empty() ? def : std::stoi(s);
 }
 static double energy_from_mc(const edm4hep::MCParticle& p) {
+  // Use stored MC energy when available, otherwise reconstruct it from mass and momentum.
   double E = p.getEnergy();
   if (E > 0) return E;
   const auto& q = p.getMomentum();
@@ -70,16 +75,19 @@ static double energy_from_mc(const edm4hep::MCParticle& p) {
 }
 
 static bool has_no_parents(const edm4hep::MCParticle& p) {
+  // Primary particles have no parent links.
   const auto parents = p.getParents();
   return parents.begin() == parents.end();
 }
 
 static double vertex_radius2_from_mc(const edm4hep::MCParticle& p) {
+  // Use squared radius for candidate tie-breaking without a square root.
   const auto& vertex = p.getVertex();
   return vertex.x * vertex.x + vertex.y * vertex.y + vertex.z * vertex.z;
 }
 
 static int mc_selection_priority(const edm4hep::MCParticle& p, int expectedPDG) {
+  // Lower priority values are better truth-particle matches.
   const bool not_from_sim = !p.isCreatedInSimulation();
   const bool no_parents = has_no_parents(p);
   const bool matches_expected_pdg =
@@ -117,6 +125,7 @@ int main(int argc, char** argv) {
   }
 
   float  t_mc_E=0;
+  // Output vectors hold merged cell energies separately for each layer.
   std::array<std::vector<float>, kLayerCount> t_layer_cell_E {};
 
   TTree* events = new TTree("events", "per-event dataset");
@@ -135,6 +144,7 @@ int main(int argc, char** argv) {
   catch (std::exception& e) { std::cerr << "ERROR opening " << inFile << ": " << e.what() << std::endl; return 2; }
 
   std::string category = "events";
+  // Prefer the standard events category, otherwise use the first available category.
   try {
     auto cats = reader.getAvailableCategories();
     if (!cats.empty()) {
@@ -183,6 +193,7 @@ int main(int argc, char** argv) {
       double best_energy = -1.0;
 
       for (const auto& p : *mcCollection) {
+        // Rank candidates by PDG match, origin, time, vertex, then energy.
         const double energy = energy_from_mc(p);
         const int priority = mc_selection_priority(p, expectedPDG);
         const double abs_time = std::abs(static_cast<double>(p.getTime()));
@@ -242,7 +253,7 @@ int main(int argc, char** argv) {
     if (simCollection && debug && nEvents==1) std::cerr << "[process] Using Sim collection: HCal_Readout (size=" << simCollection->size() << ")\n";
 
     if (simCollection) {
-      // Increment non-empty counter
+      // Count events with at least one calorimeter hit.
       if (!simCollection->empty()) {
         ++nWithSim;
       }
@@ -274,10 +285,12 @@ int main(int argc, char** argv) {
       }
     }
 
+    // Store the selected generator energy and merged cell energies for this event.
     t_mc_E = (float)mcE;
     events->Fill();
   }
 
+  // Write the compact per-event tree used by later calibration and performance steps.
   fout->cd();
   events->Write();
   fout->Close();

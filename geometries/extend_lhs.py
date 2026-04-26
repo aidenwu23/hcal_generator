@@ -3,9 +3,9 @@
 Extend an existing LHS sweep YAML with additional non-overlapping variants.
 Example:
 python geometries/extend_lhs.py \
-  --input geometries/sweeps/finalized_run.yaml \
-  --out geometries/sweeps/extension_1.yaml \
-  --n 40 \
+  --input geometries/sweeps/runs/75_geos.yaml \
+  --out geometries/sweeps/runs/75_geos_extension.yaml \
+  --n 75 \
   --seed 67
 """
 

@@ -3,7 +3,7 @@ Build one run-level CSV row per processed geometry run.
 
 python3 surrogate/build_raw_csv.py \
   --processed-root data/processed \
-  --out surrogate/campaigns/data.csv
+  --out csv_data/test.csv
 """
 
 import argparse
@@ -46,6 +46,8 @@ PREFERRED_COLUMNS = [
     "seg3_layers",
     *THICKNESS_COLUMNS,
     "detection_efficiency",
+    "tiles_mean",
+    "layers_mean",
 ]
 
 
@@ -90,6 +92,8 @@ def _extract(meta_p: Path, calibration_p: Path, perf_p: Path, geometry_root: Pat
         "t_spacer":             geom_params.get("t_spacer"),
         # Performance metrics
         "detection_efficiency": perf.get("detection_efficiency"),
+        "tiles_mean":           perf.get("tiles_mean"),
+        "layers_mean":          perf.get("layers_mean"),
     }
 
 

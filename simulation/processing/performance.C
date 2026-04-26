@@ -1,5 +1,6 @@
 /*
 Particle performance summary.
+Reads processed event hits and writes detection efficiency plus tile/layer activity metrics.
 */
 
 #include <TFile.h>
@@ -18,9 +19,10 @@ Particle performance summary.
 
 namespace {
 
-constexpr int kLayerCount = 10;
+constexpr int kLayerCount = 10;  // Number of nHCal sampling layers in this template.
 
 struct PerformanceStats {
+  // Accumulates event counts and moments needed for mean and RMS activity.
   long long valid_event_count = 0;
   long long detected_event_count = 0;
   double tile_count_sum = 0.0;
@@ -30,6 +32,7 @@ struct PerformanceStats {
 };
 
 std::string sibling_path(const std::string& path, const std::string& basename) {
+  // Build a default output/input path next to the events file.
   const auto separator_index = path.find_last_of("/\\");
   if (separator_index == std::string::npos) {
     return basename;
@@ -38,6 +41,7 @@ std::string sibling_path(const std::string& path, const std::string& basename) {
 }
 
 std::string string_arg_or_default(const char* value, const std::string& fallback) {
+  // Treat empty optional ROOT macro arguments as defaults.
   if (value && std::string(value).size()) {
     return std::string(value);
   }
@@ -48,6 +52,7 @@ bool load_json_file(const std::string& path,
                     const char* label,
                     nlohmann::json& json_payload,
                     const char* context_label) {
+  // Load a JSON file and print a context-specific error on failure.
   std::ifstream input(path);
   if (!input) {
     std::cerr << "[" << context_label << "] Failed to open " << label << " at " << path << ".\n";
@@ -66,6 +71,7 @@ bool load_json_file(const std::string& path,
 }
 
 int layer_to_segment(int layer_index) {
+  // Map the 10 layers onto the 3/3/4 longitudinal segmentation.
   if (layer_index < 3) {
     return 0;
   }
@@ -113,6 +119,7 @@ void performance(const char* events_path_cstr, const char* meta_path_cstr = "",
   }
 
   std::array<double, 3> thresholds {};
+  // Load one threshold per longitudinal segment.
   for (std::size_t segment_index = 0; segment_index < thresholds.size(); ++segment_index) {
     thresholds[segment_index] = calibration_json["thresholds"][segment_index].get<double>();
   }
@@ -140,6 +147,7 @@ void performance(const char* events_path_cstr, const char* meta_path_cstr = "",
   }
 
   float mc_E = 0.0F;
+  // ROOT owns the vectors behind the branch addresses.
   std::array<std::vector<float>*, kLayerCount> layer_cell_E {};
   tree->SetBranchAddress("mc_E", &mc_E);
   for (int layer_index = 0; layer_index < kLayerCount; ++layer_index) {
@@ -153,7 +161,7 @@ void performance(const char* events_path_cstr, const char* meta_path_cstr = "",
   for (Long64_t entry_index = 0; entry_index < entry_count; ++entry_index) {
     tree->GetEntry(entry_index);
 
-    // Require valid energy
+    // Require a recorded positive generator energy.
     const double mc_energy_GeV = static_cast<double>(mc_E);
     if (mc_energy_GeV <= 0.0) {
       continue;
@@ -163,6 +171,7 @@ void performance(const char* events_path_cstr, const char* meta_path_cstr = "",
 
     int fired_cell_count = 0;
     int fired_layer_count = 0;
+    // Count fired cells and whether each layer has at least one fired cell.
     for (int layer_index = 0; layer_index < kLayerCount; ++layer_index) {
       const int segment_index = layer_to_segment(layer_index);
       const auto* cell_energies = layer_cell_E[static_cast<std::size_t>(layer_index)];
@@ -188,29 +197,24 @@ void performance(const char* events_path_cstr, const char* meta_path_cstr = "",
     stats.layer_count_sum += fired_layer_total;
     stats.layer_count_sum_squares += fired_layer_total * fired_layer_total;
 
-    if (fired_layer_count >= 1) {
+    if (fired_tile_count >= 1.0) {
       stats.detected_event_count++;
     }
   }
 
   nlohmann::json output;
+  // Store raw counts first so downstream scripts can recompute derived quantities.
   output["valid_event_count"] = stats.valid_event_count;
   output["detected_event_count"] = stats.detected_event_count;
 
   if (stats.valid_event_count > 0) {
+    // Compute event-averaged efficiency and activity moments over valid events.
     const double valid_event_count = static_cast<double>(stats.valid_event_count);
-    const double detection_efficiency =
-        static_cast<double>(stats.detected_event_count) / valid_event_count;
+    const double detection_efficiency = static_cast<double>(stats.detected_event_count) / valid_event_count;
     const double tiles_mean = stats.tile_count_sum / valid_event_count;
-    const double tiles_variance = std::max(
-        0.0,
-        (stats.tile_count_sum_squares / valid_event_count) -
-            (tiles_mean * tiles_mean));
+    const double tiles_variance = std::max(0.0, (stats.tile_count_sum_squares / valid_event_count) - (tiles_mean * tiles_mean));
     const double layers_mean = stats.layer_count_sum / valid_event_count;
-    const double layers_variance = std::max(
-        0.0,
-        (stats.layer_count_sum_squares / valid_event_count) -
-            (layers_mean * layers_mean));
+    const double layers_variance = std::max(0.0, (stats.layer_count_sum_squares / valid_event_count) - (layers_mean * layers_mean));
     output["detection_efficiency"] = detection_efficiency;
     output["tiles_mean"] = tiles_mean;
     output["tiles_std"] = std::sqrt(tiles_variance);

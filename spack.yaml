@@ -1,0 +1,23 @@
+spack:
+  concretizer:
+    unify: true
+    reuse: true
+
+  view: ./view
+
+  specs:
+  - "dd4hep +dddetectors +ddg4 +ddrec +edm4hep +utilityapps cxxstd=20"
+  - "geant4 +data +threads cxxstd=20"
+  - "root cxxstd=20"
+  - "nlohmann-json"
+  - "py-pip"
+
+  packages:
+    all:
+      require:
+      - "%gcc@13.3.0"
+
+  develop:
+    dd4hep:
+      spec: "dd4hep +dddetectors +ddg4 +ddrec +edm4hep +utilityapps cxxstd=20"
+      path: /home/aiden/tools/dev/spack-srcs/DD4hep

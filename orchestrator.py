@@ -6,7 +6,7 @@ propose the next geometry batch for conductor.py.
 
 Example:
 python3 orchestrator.py \
-  --training-csv surrogate/iterations/1-3_GeV/iteration_1/training_compact_0-1.csv \
+  --training-csv surrogate/campaigns/0.5/training_compact_0-1.csv \
   --run-level-csv surrogate/iterations/1-3_GeV/iteration_1/training_raw_0-1.csv \
   --model surrogate/model/1-3_GeV/lgbm_surrogate_0-1.joblib \
   --bo-spec geometries/sweeps/bo_spec.yaml \
@@ -24,16 +24,15 @@ import subprocess
 from pathlib import Path
 
 import pandas as pd
+import yaml
+
+from surrogate.scoring import score_row, safe_eval_expr
 
 
 def run_cmd(cmd: list[str]) -> None:
     cmd = [str(value) for value in cmd]
     print("RUN:", " ".join(cmd))
     subprocess.run(cmd, check=True)
-
-
-def safe_eval_expr(expr: str, local_vars: dict[str, object]) -> float:
-    return float(eval(expr, {"__builtins__": {}}, local_vars))
 
 
 def ensure_processed_root(processed_root: Path | None) -> Path:
@@ -90,7 +89,9 @@ def propose_next_geometries(
 
 def select_best_observed_geometry(
     training_csv: Path,
-    objective_expr: str,
+    objective_expr: str | None,
+    scoring: dict[str, object] | None,
+    scoring_relative_to: Path,
     output_csv: Path,
 ) -> None:
     df = pd.read_csv(training_csv)
@@ -103,13 +104,20 @@ def select_best_observed_geometry(
     for geometry_id, geometry_df in df.groupby("geometry_id", sort=False):
         geometry_row = geometry_df.iloc[[0]].copy()
         row_values = geometry_row.iloc[0].to_dict()
-        try:
-            geometry_score = safe_eval_expr(objective_expr, row_values)
-        except Exception as error:
-            raise ValueError(
-                f"Failed to evaluate best-objective expression {objective_expr!r} "
-                f"against the geometry training CSV."
-            ) from error
+        if objective_expr:
+            try:
+                geometry_score = safe_eval_expr(objective_expr, row_values)
+            except Exception as error:
+                raise ValueError(
+                    f"Failed to evaluate best-objective expression {objective_expr!r} "
+                    f"against the geometry training CSV."
+                ) from error
+        elif scoring is not None:
+            geometry_score, extra_values = score_row(row_values, scoring, scoring_relative_to)
+            for column_name, column_value in extra_values.items():
+                geometry_row[column_name] = column_value
+        else:
+            raise ValueError("Either objective_expr or scoring must be provided.")
         if best_geometry_score is None or geometry_score > best_geometry_score:
             best_geometry_id = geometry_id
             best_geometry_score = geometry_score
@@ -143,8 +151,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=0, help="Random seed for candidate sampling.")
     parser.add_argument(
         "--best-objective",
-        default="neutron_efficiency",
-        help="Objective expression used to select the best observed geometry.",
+        default=None,
+        help="Optional objective expression used to select the best observed geometry.",
     )
     parser.add_argument(
         "--best-observed-csv",
@@ -175,6 +183,9 @@ def main() -> None:
     spec_path = Path(args.bo_spec)
     sweep_yaml = Path(args.sweep_yaml)
     best_observed_csv = Path(args.best_observed_csv)
+    with spec_path.open("r", encoding="utf-8") as input_file:
+        bo_spec = yaml.safe_load(input_file) or {}
+    scoring = bo_spec.get("scoring", {}) or {}
 
     # Rebuild the training CSV only when it does not already exist.
     if not geometry_training_csv.exists():
@@ -214,6 +225,8 @@ def main() -> None:
     select_best_observed_geometry(
         training_csv=geometry_training_csv,
         objective_expr=args.best_objective,
+        scoring=None if args.best_objective else scoring,
+        scoring_relative_to=spec_path.parent,
         output_csv=best_observed_csv,
     )
 

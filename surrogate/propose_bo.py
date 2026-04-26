@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 from typing import Any, Dict, List, Tuple
 
 import joblib
@@ -38,7 +39,13 @@ import numpy as np
 import pandas as pd
 import yaml
 
-# Check if PyTorch is available for Sobol sampling
+PROJECT_DIRECTORY = Path(__file__).resolve().parents[1]
+if str(PROJECT_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(PROJECT_DIRECTORY))
+
+from surrogate.scoring import safe_eval_expr, score_prediction_dict
+
+# Use Sobol sampling when PyTorch is available, otherwise fall back to random sampling.
 _TORCH_OK = False
 try:
     import torch  # type: ignore
@@ -79,6 +86,7 @@ GEOM_VARS = [
 # Sampling helpers
 # -------------------------------------------------------------------------------------------------
 def sobol_u01(n: int, d: int, seed: int) -> np.ndarray:
+    # Draw candidates in the unit hypercube before scaling to geometry bounds.
     if _TORCH_OK:
         eng = torch.quasirandom.SobolEngine(dimension=d, scramble=True, seed=seed)
         return eng.draw(n).cpu().numpy()
@@ -87,6 +95,7 @@ def sobol_u01(n: int, d: int, seed: int) -> np.ndarray:
 
 
 def load_model_bundle(model_path: str) -> Tuple[Any, List[str], List[str]]:
+    # Load either the newer model bundle format or a bare legacy model.
     loaded_payload = joblib.load(model_path)
     if isinstance(loaded_payload, dict) and "model" in loaded_payload:
         model = loaded_payload["model"]
@@ -106,6 +115,7 @@ def load_model_bundle(model_path: str) -> Tuple[Any, List[str], List[str]]:
 
 
 def parse_bounds(bounds_spec: Dict[str, Any], var_names: List[str]) -> Tuple[np.ndarray, np.ndarray, List[Dict[str, Any]]]:
+    # Convert YAML bounds into arrays aligned with the geometry variable order.
     lows, highs, meta = [], [], []
     for name in var_names:
         if name not in bounds_spec:
@@ -130,6 +140,7 @@ def parse_bounds(bounds_spec: Dict[str, Any], var_names: List[str]) -> Tuple[np.
 
 
 def apply_discreteness(X: np.ndarray, var_names: List[str], meta: List[Dict[str, Any]]) -> np.ndarray:
+    # Snap integer or stepped variables back onto their allowed grid.
     X2 = X.copy()
     for j, meta_entry in enumerate(meta):
         discrete_type = str(meta_entry.get("type", "float")).lower()
@@ -143,11 +154,13 @@ def apply_discreteness(X: np.ndarray, var_names: List[str], meta: List[Dict[str,
 
 
 def normalize01(X: np.ndarray, lows: np.ndarray, highs: np.ndarray) -> np.ndarray:
+    # Normalize geometry vectors so distance cuts treat each varied knob evenly.
     denom = np.maximum(highs - lows, 1e-12)
     return (X - lows) / denom
 
 
 def diverse_topk(X: np.ndarray, scores: np.ndarray, k: int, min_dist: float, lows: np.ndarray, highs: np.ndarray) -> np.ndarray:
+    # Select high-scoring candidates while keeping a minimum normalized separation.
     idx_sorted = np.argsort(-scores)
     Xn = normalize01(X, lows, highs)
     chosen: List[int] = []
@@ -161,7 +174,7 @@ def diverse_topk(X: np.ndarray, scores: np.ndarray, k: int, min_dist: float, low
         if np.all(d >= min_dist):
             chosen.append(int(idx))
 
-    # pad if needed
+    # Fill remaining slots by score if the distance cut is too restrictive.
     if len(chosen) < k:
         for idx in idx_sorted:
             ii = int(idx)
@@ -175,11 +188,8 @@ def diverse_topk(X: np.ndarray, scores: np.ndarray, k: int, min_dist: float, low
 # -------------------------------------------------------------------------------------------------
 # Constraint + scoring helpers
 # -------------------------------------------------------------------------------------------------
-def safe_eval_expr(expr: str, local_vars: Dict[str, Any]) -> bool:
-    return bool(eval(expr, {"__builtins__": {}}, local_vars))
-
-
 def load_yaml_mapping(path: Path) -> Dict[str, Any]:
+    # Load a YAML file that must contain a mapping at the top level.
     with path.open("r", encoding="utf-8") as input_file:
         payload = yaml.safe_load(input_file) or {}
     if not isinstance(payload, dict):
@@ -188,12 +198,13 @@ def load_yaml_mapping(path: Path) -> Dict[str, Any]:
 
 
 def filter_design_constraints(X: np.ndarray, var_names: List[str], exprs: List[str]) -> np.ndarray:
+    # Evaluate geometry-space constraints before running surrogate prediction.
     if not exprs:
         return np.ones((X.shape[0],), dtype=bool)
     ok = np.ones((X.shape[0],), dtype=bool)
     for i in range(X.shape[0]):
         loc = {var_names[j]: float(X[i, j]) for j in range(len(var_names))}
-        # also expose ints nicely for layer vars
+        # Expose layer variables as integers for constraint expressions.
         for k, v in list(loc.items()):
             if "layers" in k:
                 loc[k] = int(round(v))
@@ -209,6 +220,7 @@ def filter_design_constraints(X: np.ndarray, var_names: List[str], exprs: List[s
 
 
 def filter_predicted_constraints(pred: Dict[str, np.ndarray], exprs: List[str]) -> np.ndarray:
+    # Evaluate constraints that depend on surrogate-predicted quantities.
     if not exprs:
         return np.ones((len(next(iter(pred.values()))),), dtype=bool)
     ok = np.ones((len(next(iter(pred.values()))),), dtype=bool)
@@ -223,31 +235,6 @@ def filter_predicted_constraints(pred: Dict[str, np.ndarray], exprs: List[str]) 
                 ok[i] = False
                 break
     return ok
-
-
-def score_candidates(pred: Dict[str, np.ndarray], scoring: Dict[str, Any]) -> np.ndarray:
-    mode = str(scoring.get("mode", "metric")).lower()
-    maximize = bool(scoring.get("maximize", True))
-
-    if mode == "tradeoff":
-        expr = scoring.get("expr")
-        if not expr:
-            raise SystemExit("scoring.mode=tradeoff requires scoring.expr")
-        scores = np.zeros((len(next(iter(pred.values()))),), dtype=float)
-        for i in range(scores.shape[0]):
-            loc = {k: float(v[i]) for k, v in pred.items()}
-            scores[i] = float(eval(expr, {"__builtins__": {}}, loc))
-        if not maximize:
-            scores = -scores
-        return scores
-
-    metric = str(scoring.get("metric", next(iter(pred.keys()))))
-    if metric not in pred:
-        raise SystemExit(f"Unknown scoring.metric '{metric}'. Available: {list(pred.keys())}")
-    scores = pred[metric].astype(float).copy()
-    if not maximize:
-        scores = -scores
-    return scores
 
 
 # -------------------------------------------------------------------------------------------------
@@ -270,6 +257,7 @@ def build_sweep_yaml(sweep_base: Dict[str, Any], X_geom: np.ndarray, geom_var_na
     index_base = int(out.get("index_base", 0))
 
     for i in range(X_geom.shape[0]):
+        # Keep only geometry keys so downstream geometry generation sees valid inputs.
         v: Dict[str, Any] = {
             "tag": f"{tag_prefix}{index_base + i:03d}"
         }
@@ -336,6 +324,7 @@ def main() -> None:
     if not isinstance(bounds_spec, dict):
         raise SystemExit("bo_spec.yaml must contain a 'bounds' mapping.")
 
+    # Fixed features supply surrogate inputs that are not varied in this proposal batch.
     fixed_features = spec.get("fixed_features", {}) or {}
     if not isinstance(fixed_features, dict):
         raise SystemExit("'fixed_features' must be a mapping if provided.")
@@ -354,6 +343,7 @@ def main() -> None:
     # Allow only a subset of GEOM_VARS to be optimized; the rest may come from fixed_features.
     geom_var_names = [k for k in GEOM_VARS if k in bounds_spec]
 
+    # Reject typos in the bounds block before sampling candidates.
     unknown_bounds = [k for k in bounds_spec.keys() if k not in GEOM_VARS]
     if unknown_bounds:
         raise SystemExit(
@@ -385,6 +375,7 @@ def main() -> None:
     if X_geom_d.shape[0] == 0:
         raise SystemExit("No candidates satisfy design constraints. Loosen constraints or increase bounds/pool.")
 
+    # Convert valid geometry candidates into the feature table expected by the model.
     feature_rows = build_feature_rows(X_geom_d, geom_var_names, feature_columns, fixed_features)
     Xs_df = pd.DataFrame(feature_rows, columns=feature_columns)
 
@@ -394,10 +385,11 @@ def main() -> None:
     if Y.ndim != 2 or Y.shape[0] != n_candidates or Y.shape[1] != len(target_columns):
         raise SystemExit(f"Unexpected surrogate output shape {Y.shape}; expected (N,{len(target_columns)}).")
 
+    # Flatten model outputs into named arrays for scoring and predicted constraints.
     pred_flat = {name: Y[:, i] for i, name in enumerate(target_columns)}
 
     ok_pred = filter_predicted_constraints(pred_flat, pred_exprs)
-    scores = score_candidates(pred_flat, scoring)
+    scores, _ = score_prediction_dict(pred_flat, scoring, spec_path.parent)
 
     X_final = X_geom_d[ok_pred]
     scores_final = scores[ok_pred]
@@ -405,7 +397,7 @@ def main() -> None:
     if X_final.shape[0] == 0:
         raise SystemExit("No candidates satisfy predicted constraints. Loosen constraints or increase pool.")
 
-    # Score + choose top-k with diversity
+    # Choose the best feasible candidates after applying the diversity cut.
     k = min(args.k, X_final.shape[0])
 
     chosen_idx = diverse_topk(
@@ -414,7 +406,7 @@ def main() -> None:
     )
     X_out = X_final[chosen_idx]
 
-    # Emit sweep YAML
+    # Write the selected candidates as a sweep file for geometry generation.
     sweep_yaml = build_sweep_yaml(sweep_base, X_out, geom_var_names)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

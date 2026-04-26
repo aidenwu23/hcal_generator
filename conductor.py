@@ -6,15 +6,15 @@ processed performance results for orchestrator.py.
 Example: 
 python3 conductor.py --spec geometries/sweeps/nhcal.yaml \
   --mip-alpha 0.5 \
-  --events 3000 \
+  --events 10000 \
   --gun-particle neutron \
   --gun-momentum 0.9 \
   --seeds 67 --delete-intermediates && \
 
-python3 conductor.py --spec geometries/sweeps/nhcal.yaml \
+python3 conductor.py --spec geometries/sweeps/compare.yaml \
   --g4gps-spec simulation/g4gps/neutron_spectrum_p.yaml \
-  --events 5000 \
-  --seeds 67 \
+  --events 20000 \
+  --seeds 67  \
   --mip-alpha 0.5
 """
 

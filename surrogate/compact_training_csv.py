@@ -3,12 +3,12 @@
 Compact a run-level surrogate training CSV into one row per geometry.
 Example:
 python3 surrogate/compact_training_csv.py \
-  --in surrogate/iterations/1-3_GeV/iteration_2/training_raw_0-2.csv \
-  --out surrogate/iterations/1-3_GeV/iteration_2/training_compact_0-2.csv
+  --in surrogate/campaigns/0.5-2.5_GeV_raw.csv \
+  --out surrogate/campaigns/0.5-2.5_GeV_compact.csv
 
 python3 surrogate/compact_training_csv.py \
-  --in csv_data/data.csv \
-  --out csv_data/data_compact.csv
+  --in csv_data/test.csv \
+  --out csv_data/test_compact.csv
 """
 
 from __future__ import annotations
@@ -32,6 +32,12 @@ GEOMETRY_FEATURES = [
     "t_scin_seg2",
     "t_scin_seg3",
     "t_spacer",
+]
+
+RUN_METRICS = [
+    "detection_efficiency",
+    "tiles_mean",
+    "layers_mean",
 ]
 
 def parse_arguments() -> argparse.Namespace:
@@ -125,7 +131,7 @@ def main() -> int:
         required_columns = [
             "geometry_id",
             "gun_particle",
-            "detection_efficiency",
+            *RUN_METRICS,
             *GEOMETRY_FEATURES,
         ]
         missing_required_columns = [
@@ -170,16 +176,25 @@ def main() -> int:
             particle_rows = rows_by_particle.get(particle_name, [])
             column_prefix = particle_column_map[particle_name]
 
-            efficiency_values = []
+            metric_values: dict[str, list[float]] = {
+                metric_name: [] for metric_name in RUN_METRICS
+            }
             # Average the available metrics for this geometry-particle slice.
             for row in particle_rows:
-                parsed_efficiency = parse_float(row.get("detection_efficiency", ""))
-                if parsed_efficiency is not None:
-                    efficiency_values.append(parsed_efficiency)
+                for metric_name in RUN_METRICS:
+                    parsed_metric = parse_float(row.get(metric_name, ""))
+                    if parsed_metric is not None:
+                        metric_values[metric_name].append(parsed_metric)
 
             efficiency_column_name = f"{column_prefix}_efficiency"
+            efficiency_values = metric_values["detection_efficiency"]
             output_row[efficiency_column_name] = "" if not efficiency_values else mean(efficiency_values)
             output_row[f"{efficiency_column_name}_std"] = "" if not efficiency_values else sample_std(efficiency_values)
+
+            for metric_name in ("tiles_mean", "layers_mean"):
+                metric_column_name = f"{column_prefix}_{metric_name}"
+                values = metric_values[metric_name]
+                output_row[metric_column_name] = "" if not values else mean(values)
 
         output_rows.append(output_row)
 
@@ -193,6 +208,8 @@ def main() -> int:
             [
                 f"{column_prefix}_efficiency",
                 f"{column_prefix}_efficiency_std",
+                f"{column_prefix}_tiles_mean",
+                f"{column_prefix}_layers_mean",
             ]
         )
 

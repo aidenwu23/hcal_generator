@@ -1,0 +1,46 @@
+name: iteration_3_high_stat_1
+tag_prefix: confirm
+template: geometries/templates/hcal_template.xml
+detector_type: hcal
+index_base: 0
+outdir_generated: geometries/generated
+constants:
+  side: -z
+  dx: 100/2*cm
+  dy: 100/2*cm
+  zmin: 0.20*m
+  nLayers: 10
+  t_spacer: 0.05*cm
+  spacerMaterial: Air
+  seg1_layers: 3
+  seg2_layers: 3
+  seg3_layers: 4
+variants:
+- tag: c00d8bb9
+  t_absorber_seg1: 3.9506
+  t_absorber_seg2: 3.5637
+  t_absorber_seg3: 4.3562
+  t_scin_seg1: 0.5823
+  t_scin_seg2: 0.4202
+  t_scin_seg3: 0.4172
+- tag: 2d8b2c8b
+  t_absorber_seg1: 3.5713
+  t_absorber_seg2: 3.7331
+  t_absorber_seg3: 4.1489
+  t_scin_seg1: 0.3652
+  t_scin_seg2: 0.5698
+  t_scin_seg3: 0.4767
+- tag: b838558b
+  t_absorber_seg1: 4.0965
+  t_absorber_seg2: 3.7721
+  t_absorber_seg3: 3.7961
+  t_scin_seg1: 0.3063
+  t_scin_seg2: 0.537
+  t_scin_seg3: 0.4425
+- tag: ceb74ae8
+  t_absorber_seg1: 3.7987
+  t_absorber_seg2: 4.0976
+  t_absorber_seg3: 4.1358
+  t_scin_seg1: 0.5961
+  t_scin_seg2: 0.5958
+  t_scin_seg3: 0.3641
