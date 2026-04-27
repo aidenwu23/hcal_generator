@@ -2,7 +2,9 @@
 Measure how much visible HCAL energy lands in the outer transverse edge cells.
 
 Example:
-root -l -b -q 'analysis/lateral_leakage.C("data/raw/81c3da7d/rune3896ec0d8.edm4hep.root")'
+root -l -b -q 'analysis/lateral_leakage.C("data/raw/04e3fdfb/run0904e5174f.edm4hep.root")'
+root -l -b -q 'analysis/lateral_leakage.C("data/raw/1fa19adc/runecd9bb390d.edm4hep.root")'
+
 */
 
 #include <TFormula.h>
@@ -202,7 +204,8 @@ void lateral_leakage(const char* raw_events_path_cstr,
 
     const edm4hep::SimCalorimeterHitCollection* sim_collection = nullptr;
     try {
-      sim_collection = &frame.get<edm4hep::SimCalorimeterHitCollection>(collection_name);
+      const auto* collection_base = frame.get(collection_name);
+      sim_collection = dynamic_cast<const edm4hep::SimCalorimeterHitCollection*>(collection_base);
     } catch (...) {
       continue;
     }

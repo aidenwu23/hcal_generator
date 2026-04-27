@@ -53,15 +53,12 @@ double integrated_hit_energy_in_window(const edm4hep::SimCalorimeterHit& hit) {
 }  // namespace
 
 static bool hasArg(int argc, char** argv, const std::string& key) {
-  // Check whether a command-line flag is present.
   for (int i = 1; i < argc; ++i) if (key == argv[i]) return true; return false;
 }
 static std::string getArg(int argc, char** argv, const std::string& key, const std::string& def="") {
-  // Read the value following a command-line option.
   for (int i = 1; i < argc - 1; ++i) if (key == argv[i]) return std::string(argv[i+1]); return def;
 }
 static int getArgI(int argc, char** argv, const std::string& key, int def) {
-  // Read an integer command-line option.
   const auto s = getArg(argc, argv, key, ""); return s.empty() ? def : std::stoi(s);
 }
 static double energy_from_mc(const edm4hep::MCParticle& p) {
@@ -125,7 +122,6 @@ int main(int argc, char** argv) {
   }
 
   float  t_mc_E=0;
-  // Output vectors hold merged cell energies separately for each layer.
   std::array<std::vector<float>, kLayerCount> t_layer_cell_E {};
 
   TTree* events = new TTree("events", "per-event dataset");

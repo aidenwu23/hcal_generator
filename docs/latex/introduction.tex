@@ -1,19 +1,17 @@
 \section{Introduction}\label{sec:introduction}
 
-\noindent Hadronic calorimeters are typically designed around a limited set of geometric and material constraints, so the question is often not whether the detector
-can be made arbitrarily larger, but whether the available depth can be used more effectively. In that setting, a natural detector-optimization question is whether
-low-energy neutron detection can be improved through segment-dependent absorber and scintillator thickness variation, rather than keeping the calorimeter
-uniform layer by layer.
+\noindent The Electron-Ion Collider will use the ePIC detector to study the structure of nucleons and nuclei through high-luminosity electron-proton and electron-ion collisions. In this environment, forward and backward calorimetry provide important information about neutral particles and event activity outside the central tracking region. The negative-eta hadronic calorimeter (nHCal) is a backward sampling calorimeter intended to improve hadronic coverage in the electron-going region. Optimizing its response to low-energy neutrons is therefore relevant for understanding the acceptance and hit-level performance of the backward hadronic calorimetry region.
 
-\noindent This note studies that question for the ePIC negative eta hadronic calorimeter (nHCal). The reference geometry is a uniform 10-layer sampling calorimeter
-with identical absorber and scintillator thickness in every segment. The alternative explored here is a nonuniform longitudinal parameterization in which the calorimeter
-is divided into three segments, each with its own absorber and scintillator thickness. This keeps the study close to a realistic detector-design problem: the overall depth
-remains in a comparable range, while the internal material distribution is allowed to vary.
+\noindent Within that detector context, hadronic calorimeters are typically designed under a limited set of geometric and material constraints, and previous optimization studies often 
+focus on choices such as total layer count and absorber-to-scintillator ratio. In these studies, the sampling structure is commonly treated as uniform across depth. This motivates a 
+natural question: whether allowing the absorber and scintillator thicknesses to vary non-uniformly can improve particle detection efficiency.
 
-\noindent Because the parameter space is continuous and multi-dimensional, a brute-force scan is inefficient. The optimization is instead approached with a
-surrogate-guided workflow: simulated detector responses are used to train a regression model, and that model is then used to guide subsequent geometry proposals.
+\noindent This note studies that question for low-energy neutron detection at the nHCal. The reference design is a uniform 10-layer 
+sampling calorimeter with identical absorber and scintillator thickness in every segment. The alternative explored here is a nonuniform longitudinal parameterization in 
+which the calorimeter is divided into three segments, each with its own absorber and scintillator thickness. This provides a coarse variation of the sampling structure while 
+avoiding the less realistic case in which every layer is independently optimized.
 
-\noindent This surrogate-based approach is useful only if the geometry response contains enough structure to distinguish higher-performing configurations from statistical
-fluctuations. For that reason, the study is framed not only as a detector-optimization problem, but also as a test of whether a practical machine-learning workflow can
-resolve meaningful performance differences in a relatively shallow calorimeter-design landscape. The main comparison throughout the note is therefore between the uniform
-nHCal baseline and the best-performing nonuniform geometries identified by the optimization procedure.
+\noindent Because the resulting parameter space is continuous and multi-dimensional, a brute-force scan is inefficient. The optimization is thus approached with a
+surrogate-guided workflow: simulated detector responses are used to train a LightGBM regression model, and that model is then used to guide subsequent proposals of high-performing candidates.
+
+\noindent The purpose of the surrogate-guided workflow is therefore twofold. First, it provides a practical way to search a continuous geometry space without simulating a dense grid of all possible thickness combinations. Second, it tests whether the simulated response contains enough structure for such a workflow to identify useful geometry trends rather than only statistical fluctuations. The main comparison throughout the note is between the uniform nHCal baseline and the best-performing nonuniform geometries identified by this procedure.
